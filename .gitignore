@@ -1,0 +1,29 @@
+# Python
+backend/venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Env files
+.env
+backend/.env
+frontend/.env
+
+# Node
+node_modules/
+frontend/dist/
+frontend/node_modules/
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Build caches
+*.tsbuildinfo
+
+# Claude Code local session files
+.claude/

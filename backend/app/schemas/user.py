@@ -1,0 +1,40 @@
+import uuid
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
+
+from app.models.user import UserRole
+
+
+class TeamMemberCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    phone: str = Field(min_length=6, max_length=20)
+    email: EmailStr | None = None
+    role: UserRole
+    password: str | None = Field(default=None, min_length=6)
+    state: str | None = None
+    city: str | None = None
+
+
+class TeamMemberUpdate(BaseModel):
+    name: str | None = None
+    email: EmailStr | None = None
+    role: UserRole | None = None
+    is_active: bool | None = None
+    state: str | None = None
+    city: str | None = None
+
+
+class TeamMemberOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    phone: str
+    email: str | None
+    role: UserRole
+    is_active: bool
+    created_at: datetime
+    active_leads_count: int = 0
+    state: str | None = None
+    city: str | None = None
