@@ -7,6 +7,8 @@ import { LoginPage } from "@/pages/Login";
 import { DashboardPage } from "@/pages/app/Dashboard";
 import { LeadsPage } from "@/pages/app/Leads";
 import { FollowUpsPage } from "@/pages/app/FollowUps";
+import { LostDealsPage } from "@/pages/app/LostDeals";
+import { IntegrationsPage } from "@/pages/app/Integrations";
 import { TeamPage } from "@/pages/app/Team";
 import { AnalyticsPage } from "@/pages/app/Analytics";
 import { SuperAdminShell } from "@/pages/super-admin/SuperAdminShell";
@@ -70,10 +72,26 @@ export function App() {
         <Route path="/leads" element={<LeadsPage />} />
         <Route path="/follow-ups" element={<FollowUpsPage />} />
         <Route
+          path="/lost-deals"
+          element={
+            <ProtectedRoute roles={["admin", "manager"]}>
+              <LostDealsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/team"
           element={
             <ProtectedRoute roles={["admin", "manager"]}>
               <TeamPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/integrations"
+          element={
+            <ProtectedRoute roles={["admin", "manager"]}>
+              <IntegrationsPage />
             </ProtectedRoute>
           }
         />

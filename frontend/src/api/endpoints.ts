@@ -1,20 +1,26 @@
 import { apiClient } from "./client";
 import type {
   AnalyticsResponse,
+  AssignmentHistoryOut,
   BulkImportResult,
   CallLogOut,
   DashboardResponse,
   DuplicateLeadMatch,
+  IntegrationOut,
+  IntegrationProvider,
   LeadCategory,
+  LeadCategoryOption,
   LeadOut,
   LeadSource,
   LeadStatus,
+  BulkDeleteLostDealsResult,
+  PaginatedLostDeals,
   MyOrganization,
   OrganizationOut,
   PaginatedFollowUps,
   PaginatedLeads,
   PlatformStats,
-  ProductOut,
+  SyncResult,
   TeamMemberOut,
   UserOut,
   UserRole,
@@ -46,6 +52,7 @@ export const organizationApi = {
 
 export const usersApi = {
   list: () => apiClient.get<TeamMemberOut[]>("/users").then((r) => r.data),
+  managers: () => apiClient.get<TeamMemberOut[]>("/users/managers").then((r) => r.data),
   create: (payload: {
     name: string;
     phone: string;
@@ -92,9 +99,9 @@ export interface LeadCreatePayload {
   source: LeadSource;
   notes?: string;
   category: LeadCategory;
+  interested_categories?: LeadCategory[];
   drug_license_number?: string;
   specialty?: string;
-  product_id?: string | null;
   credit_limit?: number | null;
   outstanding_amount?: number | null;
   dnd?: boolean;
@@ -103,10 +110,14 @@ export interface LeadCreatePayload {
 export const leadsApi = {
   list: (filters: LeadFilters) => apiClient.get<PaginatedLeads>("/leads", { params: filters }).then((r) => r.data),
   get: (id: string) => apiClient.get<LeadOut>(`/leads/${id}`).then((r) => r.data),
+  assignmentHistory: (id: string) =>
+    apiClient.get<AssignmentHistoryOut[]>(`/leads/${id}/assignment-history`).then((r) => r.data),
   create: (payload: LeadCreatePayload) => apiClient.post<LeadOut>("/leads", payload).then((r) => r.data),
   update: (id: string, payload: Partial<LeadOut>) => apiClient.patch<LeadOut>(`/leads/${id}`, payload).then((r) => r.data),
   reassign: (id: string, assigned_to: string | null) =>
     apiClient.post<LeadOut>(`/leads/${id}/reassign`, { assigned_to }).then((r) => r.data),
+  markLost: (id: string, payload: { manager_id: string; reason: string }) =>
+    apiClient.post<LeadOut>(`/leads/${id}/mark-lost`, payload).then((r) => r.data),
   bulkImport: (source: LeadSource, file: File) => {
     const form = new FormData();
     form.append("file", file);
@@ -120,7 +131,9 @@ export const leadsApi = {
   remove: (id: string) => apiClient.delete(`/leads/${id}`).then((r) => r.data),
   checkDuplicate: (phone: string) =>
     apiClient.get<DuplicateLeadMatch[]>("/leads/check-duplicate", { params: { phone } }).then((r) => r.data),
-  usedCategories: () => apiClient.get<LeadCategory[]>("/leads/categories").then((r) => r.data),
+  categories: () => apiClient.get<LeadCategoryOption[]>("/leads/categories").then((r) => r.data),
+  createCategory: (name: string) =>
+    apiClient.post<LeadCategoryOption>("/leads/categories", { name }).then((r) => r.data),
   usedCities: () => apiClient.get<string[]>("/leads/cities").then((r) => r.data),
   exportCsv: (filters: Omit<LeadFilters, "page" | "page_size">) =>
     apiClient
@@ -136,7 +149,6 @@ export const callsApi = {
       outcome: LeadStatus;
       notes?: string;
       order_value?: number | null;
-      product_id?: string | null;
       next_follow_up_at?: string | null;
     }
   ) => apiClient.post<CallLogOut>(`/leads/${leadId}/calls`, payload).then((r) => r.data),
@@ -158,6 +170,21 @@ export const followUpsApi = {
     apiClient.get<PaginatedFollowUps>("/follow-ups", { params: filters }).then((r) => r.data),
 };
 
+export interface LostDealFilters {
+  telecaller_id?: string;
+  q?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export const lostDealsApi = {
+  list: (filters: LostDealFilters) =>
+    apiClient.get<PaginatedLostDeals>("/lost-deals", { params: filters }).then((r) => r.data),
+  remove: (id: string) => apiClient.delete<BulkDeleteLostDealsResult>(`/lost-deals/${id}`).then((r) => r.data),
+  bulkRemove: (ids: string[]) =>
+    apiClient.post<BulkDeleteLostDealsResult>("/lost-deals/bulk-delete", { ids }).then((r) => r.data),
+};
+
 export const analyticsApi = {
   dashboard: () => apiClient.get<DashboardResponse>("/dashboard").then((r) => r.data),
   analytics: (range: "today" | "7d" | "all", assigneeId?: string) =>
@@ -166,12 +193,16 @@ export const analyticsApi = {
       .then((r) => r.data),
 };
 
-export const productsApi = {
-  list: () => apiClient.get<ProductOut[]>("/products").then((r) => r.data),
-  create: (payload: { name: string; sku?: string }) => apiClient.post<ProductOut>("/products", payload).then((r) => r.data),
-  update: (id: string, payload: Partial<{ name: string; sku: string }>) =>
-    apiClient.patch<ProductOut>(`/products/${id}`, payload).then((r) => r.data),
-  remove: (id: string) => apiClient.delete(`/products/${id}`).then((r) => r.data),
+export const integrationsApi = {
+  list: () => apiClient.get<IntegrationOut[]>("/integrations").then((r) => r.data),
+  connect: (provider: IntegrationProvider, credentials: Record<string, string>, is_enabled = true) =>
+    apiClient
+      .put<IntegrationOut>(`/integrations/${provider}`, { credentials, is_enabled })
+      .then((r) => r.data),
+  disconnect: (provider: IntegrationProvider) =>
+    apiClient.delete<IntegrationOut>(`/integrations/${provider}`).then((r) => r.data),
+  sync: (provider: IntegrationProvider) =>
+    apiClient.post<SyncResult>(`/integrations/${provider}/sync`).then((r) => r.data),
 };
 
 export const superAdminApi = {

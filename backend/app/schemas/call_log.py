@@ -11,7 +11,6 @@ class CallLogCreate(BaseModel):
     outcome: LeadStatus
     notes: str | None = None
     order_value: float | None = Field(default=None, ge=0)
-    product_id: uuid.UUID | None = None
     next_follow_up_at: datetime | None = None
 
 
@@ -27,8 +26,6 @@ class CallLogOut(BaseModel):
     notes: str | None
     created_at: datetime
     order_value: float | None
-    product_id: uuid.UUID | None
-    product_name: str | None = None
     next_follow_up_at: datetime | None = None
 
 

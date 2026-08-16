@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { PhoneCall, Clock, Timer, PhoneMissed, IndianRupee, Wallet, MapPinned, Package } from "lucide-react";
+import { PhoneCall, Clock, Timer, PhoneMissed, IndianRupee, Wallet, MapPinned } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { analyticsApi, usersApi } from "@/api/endpoints";
 import { useAuth } from "@/hooks/useAuth";
@@ -60,6 +60,7 @@ export function AnalyticsPage() {
     <div className={`flex flex-col gap-6 transition-opacity duration-200 ${isPlaceholderData ? "opacity-60" : ""}`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
+          <p className="page-eyebrow mb-1">Workspace / Reporting</p>
           <h1 className="text-2xl font-display font-semibold text-ink-900">
             {isTelecaller ? "My Calling Analytics" : "Calling Analytics"}
           </h1>
@@ -249,7 +250,7 @@ export function AnalyticsPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6">
         <div className="card p-5">
           <h2 className="panel-header font-display font-semibold text-ink-900 mb-4">City Performance</h2>
           {!data.city_breakdown.length ? (
@@ -282,35 +283,6 @@ export function AnalyticsPage() {
           )}
         </div>
 
-        <div className="card p-5">
-          <h2 className="panel-header font-display font-semibold text-ink-900 mb-4">Product Performance</h2>
-          {!data.product_breakdown.length ? (
-            <EmptyState icon={Package} title="No orders logged yet" message="Order values from converted calls show up here." />
-          ) : (
-            <div className="overflow-x-auto scroll-shadow-x -mx-5">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-ink-500 text-xs uppercase tracking-wide">
-                    <th className="font-medium px-5 py-2">Product</th>
-                    <th className="font-medium px-5 py-2">Orders</th>
-                    <th className="font-medium px-5 py-2">Order Value</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.product_breakdown.map((p) => (
-                    <tr key={p.product_id} className="border-t border-ink-100 hover:bg-bg/60">
-                      <td className="px-5 py-3 font-medium text-ink-900">{p.product_name}</td>
-                      <td className="px-5 py-3 text-ink-700">{p.orders_count}</td>
-                      <td className="px-5 py-3 text-ink-700" title={formatCurrencyFull(p.order_value)}>
-                        {formatCurrency(p.order_value)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );

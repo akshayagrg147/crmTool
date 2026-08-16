@@ -1,13 +1,44 @@
 export type UserRole = "super_admin" | "admin" | "manager" | "telecaller";
-export type LeadSource = "manual" | "indiamart" | "tradeindia" | "website" | "referral";
+export type LeadSource = "manual" | "indiamart" | "justdial" | "tradeindia" | "website" | "referral";
 export type LeadStatus = "new" | "follow_up" | "not_picked" | "converted" | "lost";
-export type LeadCategory = "pharmaceutical" | "ayurvedic" | "homeopathic" | "nutraceutical" | "generic" | "other";
+export type LeadCategory = string;
 
-export interface ProductOut {
-  id: string;
-  name: string;
-  sku: string | null;
-  created_at: string;
+export type IntegrationProvider = "indiamart" | "justdial";
+export type IntegrationStatus = "disconnected" | "active" | "error";
+
+export interface CredentialField {
+  key: string;
+  label: string;
+  help: string;
+  secret: boolean;
+  required: boolean;
+}
+
+export interface IntegrationOut {
+  provider: IntegrationProvider;
+  label: string;
+  /** "pull" = we poll them on a timer; "push" = they POST to our webhook. */
+  ingestion: "pull" | "push";
+  docs_url: string;
+  setup_hint: string;
+  credential_fields: CredentialField[];
+  is_connected: boolean;
+  is_enabled: boolean;
+  status: IntegrationStatus;
+  masked_credentials: Record<string, string>;
+  last_synced_at: string | null;
+  last_error: string | null;
+  total_imported: number;
+  total_duplicates: number;
+  webhook_url: string | null;
+}
+
+export interface SyncResult {
+  imported: number;
+  duplicates: number;
+  invalid: number;
+  assignments: Record<string, number>;
+  message: string;
 }
 
 export interface DuplicateLeadMatch {
@@ -30,6 +61,18 @@ export interface BulkImportResult {
   skipped: number;
   duplicates_skipped: number;
   assignments: Record<string, number>;
+  issues: BulkImportIssue[];
+  issue_count: number;
+  issues_truncated: boolean;
+}
+
+export interface BulkImportIssue {
+  row: number | null;
+  field: string | null;
+  code: string;
+  message: string;
+  severity: "error" | "warning";
+  value?: string;
 }
 
 export interface UserOut {
@@ -72,13 +115,31 @@ export interface LeadOut {
   next_follow_up_at: string | null;
   last_call: LastCall | null;
   category: LeadCategory;
+  interested_categories: LeadCategory[];
   drug_license_number: string | null;
   specialty: string | null;
-  product_id: string | null;
-  product_name: string | null;
   credit_limit: number | null;
   outstanding_amount: number | null;
   dnd: boolean;
+}
+
+export interface AssignmentHistoryOut {
+  id: string;
+  previous_assignee_id: string | null;
+  previous_assignee_name: string | null;
+  new_assignee_id: string | null;
+  new_assignee_name: string | null;
+  assigned_by_id: string | null;
+  assigned_by_name: string | null;
+  action: string;
+  source: string;
+  created_at: string;
+}
+
+export interface LeadCategoryOption {
+  value: string;
+  label: string;
+  is_custom: boolean;
 }
 
 export interface PaginatedLeads {
@@ -86,6 +147,36 @@ export interface PaginatedLeads {
   total: number;
   page: number;
   page_size: number;
+}
+
+export interface LostDealOut {
+  id: string;
+  name: string;
+  phone: string;
+  city: string | null;
+  state: string | null;
+  source: LeadSource;
+  status: "lost";
+  category: LeadCategory;
+  interested_categories: LeadCategory[];
+  assigned_to: string | null;
+  assignee_name: string | null;
+  lost_by: string | null;
+  lost_by_name: string | null;
+  lost_reason: string | null;
+  lost_at: string | null;
+  created_at: string;
+}
+
+export interface PaginatedLostDeals {
+  items: LostDealOut[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface BulkDeleteLostDealsResult {
+  deleted: number;
 }
 
 export interface CallLogOut {
@@ -98,8 +189,6 @@ export interface CallLogOut {
   notes: string | null;
   created_at: string;
   order_value: number | null;
-  product_id: string | null;
-  product_name: string | null;
   next_follow_up_at: string | null;
 }
 
@@ -205,13 +294,6 @@ export interface CityBreakdown {
   order_value: number;
 }
 
-export interface ProductBreakdown {
-  product_id: string;
-  product_name: string;
-  orders_count: number;
-  order_value: number;
-}
-
 export interface AnalyticsResponse {
   total_calls: number;
   total_talk_time_minutes: number;
@@ -224,7 +306,6 @@ export interface AnalyticsResponse {
   minutes_per_member: LeaderboardRow[];
   outcomes: OutcomeSlice[];
   city_breakdown: CityBreakdown[];
-  product_breakdown: ProductBreakdown[];
 }
 
 export interface OrganizationOut {

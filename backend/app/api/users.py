@@ -10,6 +10,7 @@ from app.core.security import hash_password
 from app.models.lead import Lead
 from app.models.user import User, UserRole
 from app.schemas.user import TeamMemberCreate, TeamMemberOut, TeamMemberUpdate
+from app.services.assignment_history import record_assignment
 
 router = APIRouter(prefix="/users", tags=["team"])
 
@@ -41,6 +42,27 @@ async def list_team(current: CurrentUser = Depends(require_org_user), db: AsyncS
         count = await _active_leads_count(db, m.id)
         item = _to_out(m)
         item.active_leads_count = count
+        out.append(item)
+    return out
+
+
+@router.get("/managers", response_model=list[TeamMemberOut])
+async def list_active_managers(current: CurrentUser = Depends(require_org_user), db: AsyncSession = Depends(get_db)):
+    """Return active managers available as telecaller reassignment targets."""
+    result = await db.execute(
+        select(User)
+        .where(
+            User.organization_id == current.organization_id,
+            User.role == UserRole.manager,
+            User.is_active.is_(True),
+        )
+        .order_by(User.created_at)
+    )
+    managers = list(result.scalars().all())
+    out = []
+    for manager in managers:
+        item = _to_out(manager)
+        item.active_leads_count = await _active_leads_count(db, manager.id)
         out.append(item)
     return out
 
@@ -158,8 +180,28 @@ async def remove_team_member(
         if admin_count.scalar_one() <= 1:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot remove the last admin of the organization")
 
+    assigned_leads_result = await db.execute(
+        select(Lead.id).where(
+            Lead.assigned_to == member.id,
+            Lead.organization_id == current.organization_id,
+        )
+    )
+    for (lead_id,) in assigned_leads_result.all():
+        record_assignment(
+            db,
+            organization_id=current.organization_id,
+            lead_id=lead_id,
+            previous_assignee_id=member.id,
+            new_assignee_id=None,
+            assigned_by_id=current.id,
+            action="unassigned",
+            source="team_member_removed",
+        )
+
     await db.execute(
-        update(Lead).where(Lead.assigned_to == member.id).values(assigned_to=None)
+        update(Lead)
+        .where(Lead.assigned_to == member.id, Lead.organization_id == current.organization_id)
+        .values(assigned_to=None)
     )
     await db.delete(member)
     await db.commit()

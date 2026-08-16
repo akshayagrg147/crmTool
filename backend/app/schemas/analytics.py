@@ -97,13 +97,6 @@ class CityBreakdown(BaseModel):
     order_value: float
 
 
-class ProductBreakdown(BaseModel):
-    product_id: str
-    product_name: str
-    orders_count: int
-    order_value: float
-
-
 class AnalyticsResponse(BaseModel):
     total_calls: int
     total_talk_time_minutes: float
@@ -116,4 +109,3 @@ class AnalyticsResponse(BaseModel):
     minutes_per_member: list[LeaderboardRow]
     outcomes: list[OutcomeSlice]
     city_breakdown: list[CityBreakdown]
-    product_breakdown: list[ProductBreakdown]

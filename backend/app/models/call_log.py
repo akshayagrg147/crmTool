@@ -24,12 +24,8 @@ class CallLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
     next_follow_up_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    # Pharma-vertical fields: what was discussed/ordered on this call
+    # Value of the order placed on this call, if any
     order_value: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
-    product_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("products.id", ondelete="SET NULL"), nullable=True
-    )
 
     lead = relationship("Lead", back_populates="call_logs")
     logger = relationship("User")
-    product = relationship("Product", foreign_keys=[product_id])

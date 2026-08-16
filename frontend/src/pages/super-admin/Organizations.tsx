@@ -54,6 +54,7 @@ export function OrganizationsPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
+          <p className="page-eyebrow mb-1">Platform / Accounts</p>
           <h1 className="text-2xl font-display font-semibold text-ink-900">Organizations</h1>
           <p className="text-sm text-ink-500 mt-0.5">Manage every client organization on the platform.</p>
         </div>

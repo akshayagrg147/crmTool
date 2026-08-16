@@ -3,25 +3,26 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle } from "lucide-react";
 import { Modal } from "@/components/Modal";
 import { useToast } from "@/hooks/useToast";
-import { leadsApi, productsApi } from "@/api/endpoints";
+import { leadsApi } from "@/api/endpoints";
 import { INDIAN_STATES } from "@/lib/indianStates";
 import type { DuplicateLeadMatch, LeadCategory, LeadSource } from "@/api/types";
 
 const SOURCES: { value: LeadSource; label: string }[] = [
   { value: "manual", label: "Manual" },
   { value: "indiamart", label: "IndiaMART" },
+  { value: "justdial", label: "JustDial" },
   { value: "tradeindia", label: "TradeIndia" },
   { value: "website", label: "Website" },
   { value: "referral", label: "Referral" },
 ];
 
-const CATEGORIES: { value: LeadCategory; label: string }[] = [
-  { value: "pharmaceutical", label: "Pharmaceutical" },
-  { value: "ayurvedic", label: "Ayurvedic" },
-  { value: "homeopathic", label: "Homeopathic" },
-  { value: "nutraceutical", label: "Nutraceutical" },
-  { value: "generic", label: "Generic" },
-  { value: "other", label: "Other" },
+const CATEGORIES: { value: LeadCategory; label: string; is_custom: boolean }[] = [
+  { value: "pharmaceutical", label: "Pharmaceutical", is_custom: false },
+  { value: "ayurvedic", label: "Ayurvedic", is_custom: false },
+  { value: "homeopathic", label: "Homeopathic", is_custom: false },
+  { value: "nutraceutical", label: "Nutraceutical", is_custom: false },
+  { value: "generic", label: "Generic", is_custom: false },
+  { value: "other", label: "Other", is_custom: false },
 ];
 
 const initialForm = {
@@ -32,9 +33,9 @@ const initialForm = {
   source: "manual" as LeadSource,
   notes: "",
   category: "other" as LeadCategory,
+  interested_categories: [] as LeadCategory[],
   drug_license_number: "",
   specialty: "",
-  product_id: "",
   credit_limit: "",
   outstanding_amount: "",
   dnd: false,
@@ -44,8 +45,13 @@ export function AddLeadModal({ open, onClose }: { open: boolean; onClose: () => 
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [form, setForm] = useState(initialForm);
+  const { data: categories } = useQuery({
+    queryKey: ["lead-categories"],
+    queryFn: leadsApi.categories,
+    enabled: open,
+  });
+  const categoryOptions = categories ?? CATEGORIES;
 
-  const { data: products } = useQuery({ queryKey: ["products"], queryFn: productsApi.list, enabled: open });
 
   const [duplicates, setDuplicates] = useState<DuplicateLeadMatch[]>([]);
 
@@ -72,10 +78,10 @@ export function AddLeadModal({ open, onClose }: { open: boolean; onClose: () => 
         state: form.state || undefined,
         source: form.source,
         notes: form.notes || undefined,
-        category: form.category,
+        category: form.interested_categories[0] ?? form.category,
+        interested_categories: form.interested_categories,
         drug_license_number: form.drug_license_number || undefined,
         specialty: form.specialty || undefined,
-        product_id: form.product_id || null,
         credit_limit: form.credit_limit ? Number(form.credit_limit) : null,
         outstanding_amount: form.outstanding_amount ? Number(form.outstanding_amount) : null,
         dnd: form.dnd,
@@ -109,7 +115,7 @@ export function AddLeadModal({ open, onClose }: { open: boolean; onClose: () => 
           </button>
           <button
             className="btn-primary"
-            disabled={!form.name || !form.phone || mutation.isPending}
+            disabled={!form.name || !form.phone || !form.interested_categories.length || mutation.isPending}
             onClick={() => mutation.mutate()}
           >
             {mutation.isPending ? "Adding..." : "Add Lead"}
@@ -161,19 +167,31 @@ export function AddLeadModal({ open, onClose }: { open: boolean; onClose: () => 
           </select>
         </div>
 
-        <div>
-          <label className="text-xs font-medium text-ink-500 mb-1.5 block">Category</label>
-          <select
-            className="input"
-            value={form.category}
-            onChange={(e) => setForm({ ...form, category: e.target.value as LeadCategory })}
-          >
-            {CATEGORIES.map((c) => (
-              <option key={c.value} value={c.value}>
-                {c.label}
-              </option>
-            ))}
-          </select>
+        <div className="sm:col-span-2">
+          <label className="text-xs font-medium text-ink-500 mb-1.5 block">Categories of interest</label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-lg border border-ink-100 p-3">
+            {categoryOptions.map((c) => {
+              const checked = form.interested_categories.includes(c.value);
+              return (
+                <label key={c.value} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-ink-700 hover:bg-bg cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded accent-primary"
+                    checked={checked}
+                    onChange={() => {
+                      const next = checked
+                        ? form.interested_categories.filter((value) => value !== c.value)
+                        : [...form.interested_categories, c.value];
+                      setForm({ ...form, interested_categories: next, category: (next[0] ?? form.category) as LeadCategory });
+                    }}
+                  />
+                  <span>{c.label}</span>
+                  {c.is_custom && <span className="text-[10px] uppercase tracking-wide text-primary ml-auto">Custom</span>}
+                </label>
+              );
+            })}
+          </div>
+          <p className="text-xs text-ink-400 mt-1.5">Select every category this customer is interested in.</p>
         </div>
 
         <div className="sm:col-span-2">
@@ -213,22 +231,6 @@ export function AddLeadModal({ open, onClose }: { open: boolean; onClose: () => 
             value={form.outstanding_amount}
             onChange={(e) => setForm({ ...form, outstanding_amount: e.target.value })}
           />
-        </div>
-
-        <div>
-          <label className="text-xs font-medium text-ink-500 mb-1.5 block">Product interest</label>
-          <select
-            className="input"
-            value={form.product_id}
-            onChange={(e) => setForm({ ...form, product_id: e.target.value })}
-          >
-            <option value="">None</option>
-            {products?.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
         </div>
 
         <div>

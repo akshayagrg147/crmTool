@@ -15,10 +15,11 @@ import {
   MoreVertical,
   MessageCircle,
   AlertTriangle,
-  Package,
   Pencil,
   Download,
   UserRoundX,
+  ArchiveX,
+  Tags,
 } from "lucide-react";
 import { leadsApi, usersApi } from "@/api/endpoints";
 import { useAuth } from "@/hooks/useAuth";
@@ -33,20 +34,13 @@ import { BulkImportModal } from "@/components/leads/BulkImportModal";
 import { CallLogModal } from "@/components/leads/CallLogModal";
 import { LeadDetailModal } from "@/components/leads/LeadDetailModal";
 import { EditLeadModal } from "@/components/leads/EditLeadModal";
-import { ProductManagerModal } from "@/components/leads/ProductManagerModal";
-import { formatCallbackTime, initials, timeAgo, whatsappLink } from "@/lib/format";
+import { MarkLostModal } from "@/components/leads/MarkLostModal";
+import { CategoryManagerModal } from "@/components/leads/CategoryManagerModal";
+import { ChangeCategoryModal } from "@/components/leads/ChangeCategoryModal";
+import { formatCallbackTime, formatDate, formatDateTime, initials, whatsappLink } from "@/lib/format";
 import type { LeadCategory, LeadOut, LeadSource, LeadStatus } from "@/api/types";
 
 const PAGE_SIZE = 15;
-
-const CATEGORY_LABELS: Record<LeadCategory, string> = {
-  pharmaceutical: "Pharmaceutical",
-  ayurvedic: "Ayurvedic",
-  homeopathic: "Homeopathic",
-  nutraceutical: "Nutraceutical",
-  generic: "Generic",
-  other: "Other",
-};
 
 export function LeadsPage() {
   const { user } = useAuth();
@@ -66,13 +60,15 @@ export function LeadsPage() {
 
   const [showAdd, setShowAdd] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
+  const [showCategories, setShowCategories] = useState(false);
   const [showClearAll, setShowClearAll] = useState(false);
-  const [showProducts, setShowProducts] = useState(false);
   const [callModalLead, setCallModalLead] = useState<LeadOut | null>(null);
   const [callModalOutcome, setCallModalOutcome] = useState<LeadStatus | undefined>();
   const [detailLead, setDetailLead] = useState<LeadOut | null>(null);
   const [editLead, setEditLead] = useState<LeadOut | null>(null);
+  const [categoryLead, setCategoryLead] = useState<LeadOut | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<LeadOut | null>(null);
+  const [lostLead, setLostLead] = useState<LeadOut | null>(null);
   const [menuLead, setMenuLead] = useState<LeadOut | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -102,9 +98,19 @@ export function LeadsPage() {
 
   const { data: team } = useQuery({ queryKey: ["team"], queryFn: usersApi.list, enabled: !isTelecaller });
   const telecallers = useMemo(() => team?.filter((t) => t.role === "telecaller") ?? [], [team]);
+  const workspaceManagers = useMemo(() => team?.filter((t) => t.role === "manager") ?? [], [team]);
+  const { data: managers, isLoading: managersLoading } = useQuery({
+    queryKey: ["managers"],
+    queryFn: usersApi.managers,
+    enabled: isTelecaller,
+  });
 
-  const { data: usedCategories } = useQuery({ queryKey: ["lead-categories"], queryFn: leadsApi.usedCategories });
+  const { data: categories } = useQuery({ queryKey: ["lead-categories"], queryFn: leadsApi.categories });
   const { data: usedCities } = useQuery({ queryKey: ["lead-cities"], queryFn: leadsApi.usedCities });
+
+  useEffect(() => {
+    if (usedCities && cityFilter && !usedCities.includes(cityFilter)) setCityFilter("");
+  }, [usedCities, cityFilter]);
 
   const clearAllMutation = useMutation({
     mutationFn: leadsApi.clearAll,
@@ -131,6 +137,7 @@ export function LeadsPage() {
   });
 
   const canManage = user?.role === "admin" || user?.role === "manager";
+  const canAdmin = user?.role === "admin";
   const totalPages = data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1;
 
   async function handleExport() {
@@ -158,21 +165,26 @@ export function LeadsPage() {
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
+          <p className="page-eyebrow mb-1">Workspace / Pipeline</p>
           <h1 className="text-2xl font-display font-semibold text-ink-900">{isTelecaller ? "My Leads" : "Leads"}</h1>
           <p className="text-sm text-ink-500 mt-0.5">{data ? `${data.total} total leads` : "Loading..."}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {canManage && (
             <>
-              <button className="btn-secondary text-sm" onClick={handleExport} disabled={exporting}>
-                <Download size={16} /> {exporting ? "Exporting..." : "Export"}
-              </button>
-              <button className="btn-secondary text-sm" onClick={() => setShowProducts(true)}>
-                <Package size={16} /> Products
-              </button>
-              <button className="btn-secondary text-sm" onClick={() => setShowClearAll(true)}>
-                <Trash2 size={16} /> Clear All
-              </button>
+              {canAdmin && (
+                <>
+                  <button className="btn-secondary text-sm" onClick={() => setShowCategories(true)}>
+                    <Tags size={16} /> Categories
+                  </button>
+                  <button className="btn-secondary text-sm" onClick={handleExport} disabled={exporting}>
+                    <Download size={16} /> {exporting ? "Exporting..." : "Export"}
+                  </button>
+                  <button className="btn-secondary text-sm" onClick={() => setShowClearAll(true)}>
+                    <Trash2 size={16} /> Clear All
+                  </button>
+                </>
+              )}
               <button className="btn-secondary text-sm" onClick={() => setShowBulk(true)}>
                 <UploadCloud size={16} /> Bulk Import
               </button>
@@ -205,6 +217,7 @@ export function LeadsPage() {
           <option value="">All Sources</option>
           <option value="manual">Manual</option>
           <option value="indiamart">IndiaMART</option>
+          <option value="justdial">JustDial</option>
           <option value="tradeindia">TradeIndia</option>
           <option value="website">Website</option>
           <option value="referral">Referral</option>
@@ -219,12 +232,25 @@ export function LeadsPage() {
         </select>
         {!isTelecaller && (
           <select className="input py-2 w-auto" value={assigneeFilter} onChange={(e) => setAssigneeFilter(e.target.value)}>
-            <option value="">All Telecallers</option>
-            {telecallers.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
+            <option value="">All Assignees</option>
+            {workspaceManagers.length > 0 && (
+              <optgroup label="Managers">
+                {workspaceManagers.map((manager) => (
+                  <option key={manager.id} value={manager.id}>
+                    {manager.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {telecallers.length > 0 && (
+              <optgroup label="Telecallers">
+                {telecallers.map((telecaller) => (
+                  <option key={telecaller.id} value={telecaller.id}>
+                    {telecaller.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
         )}
         <select
@@ -233,20 +259,22 @@ export function LeadsPage() {
           onChange={(e) => setCategoryFilter(e.target.value as LeadCategory | "")}
         >
           <option value="">All Categories</option>
-          {usedCategories?.map((c) => (
-            <option key={c} value={c}>
-              {CATEGORY_LABELS[c]}
+          {categories?.map((category) => (
+            <option key={category.value} value={category.value}>
+              {category.label}
             </option>
           ))}
         </select>
-        <select className="input py-2 w-auto" value={cityFilter} onChange={(e) => setCityFilter(e.target.value)}>
-          <option value="">All Cities</option>
-          {usedCities?.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
+        {!!usedCities?.length && (
+          <select className="input py-2 w-auto" value={cityFilter} onChange={(e) => setCityFilter(e.target.value)}>
+            <option value="">All Cities</option>
+            {usedCities.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        )}
         <select
           className="input py-2 w-auto"
           value={callbackFilter}
@@ -279,6 +307,8 @@ export function LeadsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-ink-500 text-xs uppercase tracking-wide">
+                  <th className="font-medium px-5 py-3">S.No.</th>
+                  <th className="font-medium px-5 py-3">Lead Added</th>
                   <th className="font-medium px-5 py-3">Lead</th>
                   <th className="font-medium px-5 py-3">Category</th>
                   <th className="font-medium px-5 py-3">Source</th>
@@ -295,6 +325,8 @@ export function LeadsPage() {
                     className="border-t border-ink-100 hover:bg-bg/60 transition-colors duration-150 animate-fade-in"
                     style={{ animationDelay: `${Math.min(i, 10) * 30}ms` }}
                   >
+                    <td className="px-5 py-3 text-ink-500 tabular-nums">{(page - 1) * PAGE_SIZE + i + 1}</td>
+                    <td className="px-5 py-3 text-ink-700 text-xs whitespace-nowrap">{formatDate(lead.created_at)}</td>
                     <td className="px-5 py-3 cursor-pointer" onClick={() => setDetailLead(lead)}>
                       <div className="flex items-center gap-2.5">
                         <div className="h-8 w-8 rounded-full bg-badge-indigo/10 text-badge-indigo flex items-center justify-center text-[11px] font-semibold shrink-0">
@@ -323,7 +355,12 @@ export function LeadsPage() {
                       </div>
                     </td>
                     <td className="px-5 py-3">
-                      <CategoryBadge category={lead.category} />
+                      <div className="flex items-center gap-1.5 flex-wrap" title={(lead.interested_categories ?? [lead.category]).join(", ")}>
+                        <CategoryBadge category={lead.category} />
+                        {(lead.interested_categories?.length ?? 0) > 1 && (
+                          <span className="badge bg-primary/10 text-primary">+{lead.interested_categories.length - 1}</span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-5 py-3">
                       <SourceBadge source={lead.source} />
@@ -346,8 +383,8 @@ export function LeadsPage() {
                         </p>
                       )}
                     </td>
-                    <td className="px-5 py-3 text-ink-500 text-xs">
-                      {lead.last_call ? `${lead.last_call.outcome.replace("_", " ")} · ${timeAgo(lead.last_call.created_at)}` : "No calls yet"}
+                    <td className="px-5 py-3 text-ink-500 text-xs whitespace-nowrap">
+                      {lead.last_call ? formatDateTime(lead.last_call.created_at) : "No calls yet"}
                     </td>
                     <td className="px-5 py-3">
                       <div className="flex items-center justify-end gap-1">
@@ -413,7 +450,7 @@ export function LeadsPage() {
 
       <AddLeadModal open={showAdd} onClose={() => setShowAdd(false)} />
       <BulkImportModal open={showBulk} onClose={() => setShowBulk(false)} />
-      <ProductManagerModal open={showProducts} onClose={() => setShowProducts(false)} />
+      <CategoryManagerModal open={showCategories} onClose={() => setShowCategories(false)} />
       <CallLogModal
         open={!!callModalLead}
         onClose={() => setCallModalLead(null)}
@@ -432,14 +469,38 @@ export function LeadsPage() {
               }
             : undefined
         }
+        onLogCall={() => {
+          setCallModalLead(detailLead);
+          setCallModalOutcome(undefined);
+          setDetailLead(null);
+        }}
       />
       <EditLeadModal open={!!editLead} onClose={() => setEditLead(null)} lead={editLead} />
+      <ChangeCategoryModal open={!!categoryLead} onClose={() => setCategoryLead(null)} lead={categoryLead} />
+      <MarkLostModal
+        open={!!lostLead}
+        onClose={() => setLostLead(null)}
+        lead={lostLead}
+        managers={managers ?? []}
+        managersLoading={managersLoading}
+      />
       <LeadActionsMenu
         open={!!menuLead}
         anchorEl={menuAnchor}
         lead={menuLead}
         telecallers={telecallers}
+        managers={managers ?? []}
+        managersLoading={managersLoading}
         canManage={canManage}
+        canReassign={canManage || isTelecaller}
+        onMarkLost={() => {
+          setLostLead(menuLead);
+          setMenuLead(null);
+        }}
+        onChangeCategory={() => {
+          setCategoryLead(menuLead);
+          setMenuLead(null);
+        }}
         onClose={() => setMenuLead(null)}
         onQuickOutcome={(outcome) => {
           if (!menuLead) return;
@@ -482,7 +543,12 @@ function LeadActionsMenu({
   anchorEl,
   lead,
   telecallers,
+  managers,
+  managersLoading,
   canManage,
+  canReassign,
+  onMarkLost,
+  onChangeCategory,
   onClose,
   onQuickOutcome,
   onEdit,
@@ -492,7 +558,12 @@ function LeadActionsMenu({
   anchorEl: HTMLElement | null;
   lead: LeadOut | null;
   telecallers: { id: string; name: string }[];
+  managers: { id: string; name: string }[];
+  managersLoading: boolean;
   canManage: boolean;
+  canReassign: boolean;
+  onMarkLost: () => void;
+  onChangeCategory: () => void;
   onClose: () => void;
   onQuickOutcome: (outcome: LeadStatus) => void;
   onEdit: () => void;
@@ -504,10 +575,11 @@ function LeadActionsMenu({
     mutationFn: (assignedTo: string | null) => leadsApi.reassign(lead!.id, assignedTo),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["assignment-history"] });
       toast("Lead reassigned", "success");
       onClose();
     },
-    onError: () => toast("Couldn't reassign the lead.", "error"),
+    onError: (error: any) => toast(error?.response?.data?.detail ?? "Couldn't reassign the lead.", "error"),
   });
 
   if (!lead) return null;
@@ -526,6 +598,14 @@ function LeadActionsMenu({
       <button className={itemClass} onClick={() => { onQuickOutcome("converted"); onClose(); }}>
         <CheckCircle2 size={15} className="text-success" /> Converted
       </button>
+      <button className={itemClass} onClick={onChangeCategory}>
+        <Tags size={15} className="text-primary" /> Change Category
+      </button>
+      {canReassign && !canManage && (
+        <button className={`${itemClass} text-danger`} onClick={onMarkLost}>
+          <ArchiveX size={15} className="text-danger" /> Mark as Lost
+        </button>
+      )}
 
       {canManage && (
         <>
@@ -543,6 +623,27 @@ function LeadActionsMenu({
               {t.name}
             </button>
           ))}
+        </>
+      )}
+      {canReassign && !canManage && (
+        <>
+          <div className="h-px bg-ink-100 my-1" />
+          <p className="px-3 pt-1 pb-1 text-xs font-medium text-ink-500">Send to manager</p>
+          {managersLoading ? (
+            <p className="px-3 py-2 text-xs text-ink-400">Loading managers...</p>
+          ) : managers.length ? (
+            managers.map((manager) => (
+              <button key={manager.id} className={itemClass} onClick={() => reassignMutation.mutate(manager.id)}>
+                {manager.name}
+              </button>
+            ))
+          ) : (
+            <p className="px-3 py-2 text-xs text-ink-400">No active managers available</p>
+          )}
+        </>
+      )}
+      {canManage && (
+        <>
           <div className="h-px bg-ink-100 my-1" />
           <button className={`${itemClass} text-danger hover:bg-danger/5`} onClick={onDelete}>
             <Trash2 size={15} /> Delete Lead

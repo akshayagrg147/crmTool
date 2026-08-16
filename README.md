@@ -103,4 +103,6 @@ The web app is now live at `http://localhost:5173`.
 - No public sign-up: accounts are created by an org Admin (team members) or the Super Admin (new organizations).
 - The last Admin of an organization can never be removed, demoted, or deactivated — enforced server-side.
 - Lead distribution is round-robin across **active** telecallers only, with the rotation pointer persisted per-org and row-locked (`SELECT ... FOR UPDATE`) so concurrent lead creation can't double-assign.
+- Telecallers can reassign only their own leads, and only to an active Manager in the same organization. Admins and Managers retain their existing reassignment controls.
+- Telecallers can mark a lead as Lost with a required reason and manager handoff; Admins and Managers can review the resulting Lost Deals table and filter it by reporting telecaller.
 - Real telephony, billing, and Firebase/BaaS integrations are intentionally out of scope for this phase.

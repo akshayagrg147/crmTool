@@ -2,25 +2,26 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Modal } from "@/components/Modal";
 import { useToast } from "@/hooks/useToast";
-import { leadsApi, productsApi } from "@/api/endpoints";
+import { leadsApi } from "@/api/endpoints";
 import { INDIAN_STATES } from "@/lib/indianStates";
 import type { LeadCategory, LeadOut, LeadSource } from "@/api/types";
 
 const SOURCES: { value: LeadSource; label: string }[] = [
   { value: "manual", label: "Manual" },
   { value: "indiamart", label: "IndiaMART" },
+  { value: "justdial", label: "JustDial" },
   { value: "tradeindia", label: "TradeIndia" },
   { value: "website", label: "Website" },
   { value: "referral", label: "Referral" },
 ];
 
-const CATEGORIES: { value: LeadCategory; label: string }[] = [
-  { value: "pharmaceutical", label: "Pharmaceutical" },
-  { value: "ayurvedic", label: "Ayurvedic" },
-  { value: "homeopathic", label: "Homeopathic" },
-  { value: "nutraceutical", label: "Nutraceutical" },
-  { value: "generic", label: "Generic" },
-  { value: "other", label: "Other" },
+const CATEGORIES: { value: LeadCategory; label: string; is_custom: boolean }[] = [
+  { value: "pharmaceutical", label: "Pharmaceutical", is_custom: false },
+  { value: "ayurvedic", label: "Ayurvedic", is_custom: false },
+  { value: "homeopathic", label: "Homeopathic", is_custom: false },
+  { value: "nutraceutical", label: "Nutraceutical", is_custom: false },
+  { value: "generic", label: "Generic", is_custom: false },
+  { value: "other", label: "Other", is_custom: false },
 ];
 
 function toForm(lead: LeadOut) {
@@ -32,9 +33,9 @@ function toForm(lead: LeadOut) {
     source: lead.source,
     notes: lead.notes ?? "",
     category: lead.category,
+    interested_categories: lead.interested_categories?.length ? lead.interested_categories : [lead.category],
     drug_license_number: lead.drug_license_number ?? "",
     specialty: lead.specialty ?? "",
-    product_id: lead.product_id ?? "",
     credit_limit: lead.credit_limit != null ? String(lead.credit_limit) : "",
     outstanding_amount: lead.outstanding_amount != null ? String(lead.outstanding_amount) : "",
     dnd: lead.dnd,
@@ -45,12 +46,17 @@ export function EditLeadModal({ open, onClose, lead }: { open: boolean; onClose:
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [form, setForm] = useState(lead ? toForm(lead) : null);
+  const { data: categories } = useQuery({
+    queryKey: ["lead-categories"],
+    queryFn: leadsApi.categories,
+    enabled: open,
+  });
+  const categoryOptions = categories ?? CATEGORIES;
 
   useEffect(() => {
     if (open && lead) setForm(toForm(lead));
   }, [open, lead]);
 
-  const { data: products } = useQuery({ queryKey: ["products"], queryFn: productsApi.list, enabled: open });
 
   const mutation = useMutation({
     mutationFn: () => {
@@ -62,10 +68,10 @@ export function EditLeadModal({ open, onClose, lead }: { open: boolean; onClose:
         state: form.state || null,
         source: form.source,
         notes: form.notes || null,
-        category: form.category,
+        category: form.interested_categories[0] ?? form.category,
+        interested_categories: form.interested_categories,
         drug_license_number: form.drug_license_number || null,
         specialty: form.specialty || null,
-        product_id: form.product_id || null,
         credit_limit: form.credit_limit ? Number(form.credit_limit) : null,
         outstanding_amount: form.outstanding_amount ? Number(form.outstanding_amount) : null,
         dnd: form.dnd,
@@ -97,7 +103,7 @@ export function EditLeadModal({ open, onClose, lead }: { open: boolean; onClose:
           </button>
           <button
             className="btn-primary"
-            disabled={!form.name || !form.phone || mutation.isPending}
+            disabled={!form.name || !form.phone || !form.interested_categories.length || mutation.isPending}
             onClick={() => mutation.mutate()}
           >
             {mutation.isPending ? "Saving..." : "Save Changes"}
@@ -130,19 +136,31 @@ export function EditLeadModal({ open, onClose, lead }: { open: boolean; onClose:
           </select>
         </div>
 
-        <div>
-          <label className="text-xs font-medium text-ink-500 mb-1.5 block">Category</label>
-          <select
-            className="input"
-            value={form.category}
-            onChange={(e) => setForm({ ...form, category: e.target.value as LeadCategory })}
-          >
-            {CATEGORIES.map((c) => (
-              <option key={c.value} value={c.value}>
-                {c.label}
-              </option>
-            ))}
-          </select>
+        <div className="sm:col-span-2">
+          <label className="text-xs font-medium text-ink-500 mb-1.5 block">Categories of interest</label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-lg border border-ink-100 p-3">
+            {categoryOptions.map((c) => {
+              const checked = form.interested_categories.includes(c.value);
+              return (
+                <label key={c.value} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-ink-700 hover:bg-bg cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded accent-primary"
+                    checked={checked}
+                    onChange={() => {
+                      const next = checked
+                        ? form.interested_categories.filter((value) => value !== c.value)
+                        : [...form.interested_categories, c.value];
+                      setForm({ ...form, interested_categories: next, category: (next[0] ?? form.category) as LeadCategory });
+                    }}
+                  />
+                  <span>{c.label}</span>
+                  {c.is_custom && <span className="text-[10px] uppercase tracking-wide text-primary ml-auto">Custom</span>}
+                </label>
+              );
+            })}
+          </div>
+          <p className="text-xs text-ink-400 mt-1.5">Select every category this customer is interested in.</p>
         </div>
 
         <div className="sm:col-span-2">
@@ -182,22 +200,6 @@ export function EditLeadModal({ open, onClose, lead }: { open: boolean; onClose:
             value={form.outstanding_amount}
             onChange={(e) => setForm({ ...form, outstanding_amount: e.target.value })}
           />
-        </div>
-
-        <div>
-          <label className="text-xs font-medium text-ink-500 mb-1.5 block">Product interest</label>
-          <select
-            className="input"
-            value={form.product_id}
-            onChange={(e) => setForm({ ...form, product_id: e.target.value })}
-          >
-            <option value="">None</option>
-            {products?.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
         </div>
 
         <div>

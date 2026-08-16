@@ -1,5 +1,5 @@
 """Seed script: one Super Admin, one demo pharma-distribution org with
-Admin + Manager + 2 Telecallers, a small product catalog, and ~10
+Admin + Manager + 2 Telecallers, and ~10
 pharma-flavored leads (doctors, chemists, stockists, a hospital) with
 call logs — including order values — spread across different hours/days.
 
@@ -17,16 +17,8 @@ from app.models.call_log import CallLog
 from app.models.distribution_settings import DistributionSettings
 from app.models.lead import Lead, LeadCategory, LeadSource, LeadStatus
 from app.models.organization import Organization
-from app.models.product import Product
 from app.models.user import User, UserRole
 
-PRODUCTS = [
-    ("Cardivas 10mg", "CRD-010"),
-    ("Azithral 500", "AZT-500"),
-    ("Pantocid DSR", "PAN-DSR"),
-    ("Glycomet GP2", "GLY-GP2"),
-    ("Montair LC", "MON-LC"),
-]
 
 # (name, phone, city, state, category, specialty, drug_license_number, credit_limit, outstanding_amount, dnd)
 LEADS = [
@@ -69,11 +61,6 @@ async def seed():
 
         org = Organization(name="Acme Distributors", is_active=True, plan="pro")
         db.add(org)
-        await db.flush()
-
-        # --- Product catalog ---
-        products = [Product(organization_id=org.id, name=name, sku=sku) for name, sku in PRODUCTS]
-        db.add_all(products)
         await db.flush()
 
         admin = User(
@@ -121,7 +108,6 @@ async def seed():
                 category=category,
                 specialty=specialty,
                 drug_license_number=dl_number,
-                product_id=random.choice(products).id,
                 credit_limit=credit_limit,
                 outstanding_amount=outstanding,
                 dnd=dnd,
@@ -146,7 +132,6 @@ async def seed():
                         notes="Seed demo call",
                         created_at=call_time,
                         order_value=order_value,
-                        product_id=lead.product_id if order_value else None,
                     )
                 )
                 lead.last_contacted_at = call_time
@@ -159,7 +144,7 @@ async def seed():
         print("  Manager      -> phone: 9999900002  password: Manager@123")
         print("  Telecaller 1 -> phone: 9999900003  password: Telecaller@123")
         print("  Telecaller 2 -> phone: 9999900004  password: Telecaller@123")
-        print(f"  {len(products)} products, {len(leads)} leads, {len(call_logs)} call logs created for org '{org.name}'.")
+        print(f"  {len(leads)} leads, {len(call_logs)} call logs created for org '{org.name}'.")
 
 
 if __name__ == "__main__":

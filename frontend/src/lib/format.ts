@@ -16,6 +16,12 @@ export function formatCallbackTime(dateStr: string): string {
   return format(date, "d MMM, h:mm a");
 }
 
+/** Absolute timestamp — use alongside timeAgo() when two events could
+ *  otherwise both read as "36 minutes ago" and their order becomes ambiguous. */
+export function formatDateTime(dateStr: string): string {
+  return format(new Date(dateStr), "d MMM, h:mm a");
+}
+
 export function formatMinutes(mins: number): string {
   const total = Math.round(mins);
   if (total < 60) return `${total}m`;

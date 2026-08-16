@@ -9,7 +9,6 @@ from app.core.database import get_db
 from app.core.deps import CurrentUser, require_org_user
 from app.models.call_log import CallLog
 from app.models.lead import Lead, LeadStatus
-from app.models.product import Product
 from app.models.user import User, UserRole
 from app.schemas.analytics import (
     AnalyticsResponse,
@@ -21,7 +20,6 @@ from app.schemas.analytics import (
     HourlyVolume,
     LeaderboardRow,
     OutcomeSlice,
-    ProductBreakdown,
     RecentLead,
     SourceBreakdown,
     StaleLeadAlert,
@@ -332,30 +330,6 @@ async def get_analytics(
     ]
     city_breakdown.sort(key=lambda c: c.order_value, reverse=True)
 
-    # Product-wise breakdown: orders count + order value from call logs, scoped to the selected range.
-    product_stmt = (
-        select(Product.id, Product.name, func.count(CallLog.id), func.coalesce(func.sum(CallLog.order_value), 0))
-        .select_from(CallLog)
-        .join(Product, CallLog.product_id == Product.id)
-        .join(Lead, CallLog.lead_id == Lead.id)
-        .where(Lead.organization_id == current.organization_id)
-    )
-    if current.role == UserRole.telecaller:
-        product_stmt = product_stmt.where(CallLog.logged_by == current.id)
-    elif assignee_id is not None:
-        product_stmt = product_stmt.where(CallLog.logged_by == assignee_id)
-    if date_range == "today":
-        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        product_stmt = product_stmt.where(CallLog.created_at >= start)
-    elif date_range == "7d":
-        product_stmt = product_stmt.where(CallLog.created_at >= now - timedelta(days=7))
-    product_stmt = product_stmt.group_by(Product.id, Product.name).order_by(func.sum(CallLog.order_value).desc())
-    product_result = await db.execute(product_stmt)
-    product_breakdown = [
-        ProductBreakdown(product_id=str(pid), product_name=name, orders_count=count, order_value=float(value))
-        for pid, name, count, value in product_result.all()
-    ]
-
     return AnalyticsResponse(
         total_calls=total_calls,
         total_talk_time_minutes=total_talk_time,
@@ -368,5 +342,4 @@ async def get_analytics(
         minutes_per_member=leaderboard,
         outcomes=outcomes,
         city_breakdown=city_breakdown,
-        product_breakdown=product_breakdown,
     )

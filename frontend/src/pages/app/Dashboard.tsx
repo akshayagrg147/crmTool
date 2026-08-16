@@ -13,6 +13,7 @@ import {
   ArrowRight,
   IndianRupee,
   Globe2,
+  ChevronRight,
 } from "lucide-react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { analyticsApi } from "@/api/endpoints";
@@ -28,6 +29,7 @@ import type { LeadSource } from "@/api/types";
 const SOURCE_COLORS: Record<LeadSource, string> = {
   manual: "#94A3B8",
   indiamart: "#2563EB",
+  justdial: "#C2410C",
   tradeindia: "#4338CA",
   website: "#0D9488",
   referral: "#BE185D",
@@ -36,6 +38,7 @@ const SOURCE_COLORS: Record<LeadSource, string> = {
 const SOURCE_LABELS: Record<LeadSource, string> = {
   manual: "Manual",
   indiamart: "IndiaMART",
+  justdial: "JustDial",
   tradeindia: "TradeIndia",
   website: "Website",
   referral: "Referral",
@@ -84,6 +87,8 @@ export function DashboardPage() {
   const isTelecaller = user?.role === "telecaller";
   const isAdmin = user?.role === "admin";
   const maxFunnel = Math.max(...data.funnel.map((f) => f.count), 1);
+  const leadTotal = Math.max(data.kpis.total_leads, 1);
+  const conversionRate = Math.round((data.kpis.converted / leadTotal) * 100);
 
   const funnelCard = (
     <div className="card p-5">
@@ -113,13 +118,36 @@ export function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-display font-semibold text-ink-900">
-          {isTelecaller ? "My Dashboard" : "Dashboard"}
-        </h1>
-        <p className="text-sm text-ink-500 mt-0.5">
-          {isTelecaller ? "An overview of your assigned leads." : "An overview of your team's pipeline."}
-        </p>
+      <div className="flex items-center gap-1.5 text-xs text-ink-400">
+        <span>Home</span>
+        <ChevronRight size={13} />
+        <span className="font-semibold text-ink-600">Dashboard</span>
+      </div>
+      <div className="dashboard-hero relative overflow-hidden rounded-2xl px-6 py-6 sm:px-7 sm:py-7 text-white shadow-lg shadow-primary/10">
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/65 mb-2">
+              {new Date().toLocaleDateString("en-IN", { weekday: "long", month: "short", day: "numeric" })}
+            </p>
+            <h1 className="text-2xl sm:text-3xl font-display font-bold tracking-[-0.03em]">
+              {isTelecaller ? "Good to see you, keep the momentum." : "Your team, in one clear view."}
+            </h1>
+            <p className="text-sm text-white/75 mt-2 max-w-xl">
+              {isTelecaller ? "An overview of your assigned leads and next conversations." : "An overview of your team's pipeline, activity, and opportunities."}
+            </p>
+          </div>
+          <Link
+            to="/leads"
+            className="inline-flex items-center justify-center gap-2 rounded-[10px] bg-white/15 px-4 py-2.5 text-sm font-semibold text-white ring-1 ring-inset ring-white/20 backdrop-blur-sm transition-colors hover:bg-white/25"
+          >
+            Open lead queue <ArrowRight size={15} />
+          </Link>
+        </div>
+        <div className="relative z-10 mt-6 flex flex-wrap items-center gap-2 text-xs text-white/75">
+          <span className="rounded-full bg-white/12 px-3 py-1.5 ring-1 ring-inset ring-white/15">{data.kpis.total_leads} total leads</span>
+          <span className="rounded-full bg-white/12 px-3 py-1.5 ring-1 ring-inset ring-white/15">{data.kpis.converted} converted</span>
+          <span className="rounded-full bg-white/12 px-3 py-1.5 ring-1 ring-inset ring-white/15">{formatCurrency(data.kpis.total_order_value)} order value</span>
+        </div>
       </div>
 
       {data.stale_leads.count > 0 && (
@@ -175,6 +203,68 @@ export function DashboardPage() {
           color="teal"
           to="/analytics"
         />
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.45fr)_minmax(300px,0.7fr)] gap-5">
+        <div className="card p-5 sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="page-eyebrow mb-1">Pipeline movement</p>
+              <h2 className="panel-header font-display text-base">Lead activity</h2>
+              <p className="text-xs text-ink-500 mt-1">A quick view of where your leads sit today.</p>
+            </div>
+            <Link to="/analytics" className="btn-ghost text-xs px-2.5 py-1.5">Full analytics <ArrowRight size={13} /></Link>
+          </div>
+          <div className="mt-7 flex h-40 items-end gap-3 sm:gap-5 border-b border-ink-100 px-1">
+            {data.funnel.map((stage, i) => (
+              <div key={stage.stage} className="group flex min-w-0 flex-1 flex-col items-center justify-end gap-2 h-full">
+                <span className="text-[11px] font-semibold text-ink-700 opacity-0 transition-opacity group-hover:opacity-100">{stage.count}</span>
+                <div
+                  className="w-full max-w-12 rounded-t-lg bg-gradient-to-t from-primary to-[#8B5CF6] transition-all duration-700 group-hover:from-[#7C3AED] group-hover:to-[#C4B5FD]"
+                  style={{ height: animateIn ? `${Math.max((stage.count / maxFunnel) * 78, 7)}%` : "7%", transitionDelay: `${i * 90}ms` }}
+                />
+                <span className="max-w-16 truncate text-[10px] font-medium text-ink-500">{stage.stage.replace("Not Picked", "Not picked")}</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-ink-500">
+            <span>Tracked across {data.kpis.total_leads} leads</span>
+            <span className="font-semibold text-success">{data.kpis.converted} converted this period</span>
+          </div>
+        </div>
+
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#4F46E5] via-[#6D28D9] to-[#A21CAF] p-6 text-white shadow-lg shadow-violet-500/15">
+          <div className="absolute -right-12 -top-16 h-48 w-48 rounded-full border-[24px] border-white/10" />
+          <div className="absolute -bottom-16 -left-12 h-44 w-44 rounded-full border-[18px] border-white/10" />
+          <div className="relative z-10 flex h-full flex-col">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-white/60">Conversion health</p>
+                <h2 className="mt-1 text-base font-semibold">Team performance</h2>
+              </div>
+              <Trophy size={18} className="text-white/60" />
+            </div>
+            <div className="mt-6 flex items-center gap-5">
+              <div className="relative h-28 w-28 shrink-0 rounded-full" style={{ background: `conic-gradient(#FDE68A ${conversionRate * 3.6}deg, rgba(255,255,255,0.16) 0deg)` }}>
+                <div className="absolute inset-3 flex flex-col items-center justify-center rounded-full bg-[#5B21B6]">
+                  <span className="text-2xl font-bold tracking-[-0.04em]">{conversionRate}%</span>
+                  <span className="text-[10px] text-white/60">converted</span>
+                </div>
+              </div>
+              <div className="min-w-0">
+                <p className="text-2xl font-bold tracking-[-0.04em]">{formatCurrency(data.kpis.total_order_value)}</p>
+                <p className="mt-1 text-xs text-white/65">total order value</p>
+                <div className="mt-4 flex items-center gap-2 text-xs text-white/80">
+                  <span className="h-2 w-2 rounded-full bg-emerald-300" />
+                  {data.kpis.converted} successful conversions
+                </div>
+              </div>
+            </div>
+            <Link to="/analytics" className="mt-auto flex items-center justify-between border-t border-white/15 pt-4 text-xs font-semibold text-white/80 hover:text-white">
+              View performance report <ArrowRight size={14} />
+            </Link>
+          </div>
+        </div>
       </div>
 
       {isAdmin ? (

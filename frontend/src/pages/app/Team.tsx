@@ -68,6 +68,7 @@ export function TeamPage() {
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
+          <p className="page-eyebrow mb-1">Workspace / People</p>
           <h1 className="text-2xl font-display font-semibold text-ink-900">Team</h1>
           <p className="text-sm text-ink-500 mt-0.5">{team?.length ?? 0} members</p>
         </div>

@@ -24,6 +24,7 @@ export function StatusBadge({ status }: { status: LeadStatus }) {
 const sourceLabels: Record<LeadSource, string> = {
   manual: "Manual",
   indiamart: "IndiaMART",
+  justdial: "JustDial",
   tradeindia: "TradeIndia",
   website: "Website",
   referral: "Referral",
@@ -33,7 +34,7 @@ export function SourceBadge({ source }: { source: LeadSource }) {
   return <span className="badge bg-badge-indigo/10 text-badge-indigo">{sourceLabels[source]}</span>;
 }
 
-const categoryConfig: Record<LeadCategory, { label: string; icon: typeof Pill; className: string }> = {
+const categoryConfig: Record<string, { label: string; icon: typeof Pill; className: string }> = {
   pharmaceutical: { label: "Pharmaceutical", icon: Pill, className: "bg-badge-indigo/10 text-badge-indigo" },
   ayurvedic: { label: "Ayurvedic", icon: Leaf, className: "bg-badge-teal/10 text-badge-teal" },
   homeopathic: { label: "Homeopathic", icon: Droplet, className: "bg-badge-orange/10 text-badge-orange" },
@@ -43,7 +44,12 @@ const categoryConfig: Record<LeadCategory, { label: string; icon: typeof Pill; c
 };
 
 export function CategoryBadge({ category }: { category: LeadCategory }) {
-  const cfg = categoryConfig[category];
+  const cfg =
+    categoryConfig[category] ?? {
+      label: category,
+      icon: Package,
+      className: "bg-primary/10 text-primary",
+    };
   const Icon = cfg.icon;
   return (
     <span className={`badge ${cfg.className}`}>

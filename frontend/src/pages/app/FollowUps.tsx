@@ -50,6 +50,7 @@ export function FollowUpsPage() {
   return (
     <div className="flex flex-col gap-5">
       <div>
+        <p className="page-eyebrow mb-1">Workspace / Next actions</p>
         <h1 className="text-2xl font-display font-semibold text-ink-900">Follow-ups</h1>
         <p className="text-sm text-ink-500 mt-0.5">
           {data ? `${data.total} follow-up ${data.total === 1 ? "message" : "messages"}` : "Loading..."}

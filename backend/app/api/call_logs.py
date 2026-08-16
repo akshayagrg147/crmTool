@@ -16,13 +16,12 @@ from app.schemas.call_log import CallLogCreate, CallLogOut, FollowUpOut, Paginat
 router = APIRouter(prefix="/leads", tags=["calls"])
 followups_router = APIRouter(prefix="/follow-ups", tags=["follow-ups"])
 
-CALL_LOAD_OPTIONS = (selectinload(CallLog.logger), selectinload(CallLog.product))
+CALL_LOAD_OPTIONS = (selectinload(CallLog.logger),)
 
 
 def _to_out(call: CallLog) -> CallLogOut:
     out = CallLogOut.model_validate(call)
     out.logged_by_name = call.logger.name if call.logger else None
-    out.product_name = call.product.name if call.product else None
     return out
 
 
@@ -49,7 +48,6 @@ async def log_call(
         outcome=payload.outcome,
         notes=payload.notes,
         order_value=payload.order_value,
-        product_id=payload.product_id,
         next_follow_up_at=next_follow_up_at,
     )
     db.add(call)

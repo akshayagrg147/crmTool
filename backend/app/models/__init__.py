@@ -1,8 +1,19 @@
 from app.models.organization import Organization
-from app.models.product import Product
 from app.models.user import User
 from app.models.lead import Lead
+from app.models.lead_category import LeadCategoryOption
 from app.models.call_log import CallLog
 from app.models.distribution_settings import DistributionSettings
+from app.models.integration import LeadIntegration
+from app.models.lead_assignment import LeadAssignmentHistory
 
-__all__ = ["Organization", "Product", "User", "Lead", "CallLog", "DistributionSettings"]
+__all__ = [
+    "Organization",
+    "User",
+    "Lead",
+    "LeadCategoryOption",
+    "CallLog",
+    "DistributionSettings",
+    "LeadIntegration",
+    "LeadAssignmentHistory",
+]

@@ -25,14 +25,14 @@ export function KpiCard({ label, value, delta, icon: Icon, color, to }: KpiCardP
 
   const content = (
     <>
-      <div className="flex items-start justify-between mb-3">
+      <div className="flex items-start justify-between mb-4">
         <p className="text-[13px] font-medium text-ink-500">{label}</p>
-        <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${colorClasses[color]}`}>
+        <div className={`h-9 w-9 rounded-xl flex items-center justify-center ring-1 ring-inset ring-black/[0.04] ${colorClasses[color]}`}>
           <Icon size={16} />
         </div>
       </div>
       <div className="flex items-end justify-between">
-        <p className="text-[28px] leading-none font-semibold text-ink-900 tabular-nums tracking-[-0.02em]">
+        <p className="text-[30px] leading-none font-bold text-ink-900 tabular-nums tracking-[-0.04em]">
           {animatedValue}
         </p>
         {to && (
