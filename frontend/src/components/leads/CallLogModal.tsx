@@ -155,7 +155,9 @@ export function CallLogModal({
         )}
 
         <p className="text-xs text-ink-500">
-          All fields are required. <span className="text-danger">*</span>
+          {isNotPicked
+            ? "A not-picked outcome can be saved without call duration or notes."
+            : "Complete the required call details before saving."}
         </p>
 
         {!isNotPicked && (

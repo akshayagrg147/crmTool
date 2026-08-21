@@ -1,7 +1,8 @@
 import { Outlet } from "react-router-dom";
-import { ChevronDown, LogOut, ShieldCheck } from "lucide-react";
+import { ChevronDown, LogOut } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { BrandLogo } from "@/components/BrandMark";
 
 export function SuperAdminShell() {
   const { user, logout } = useAuth();
@@ -9,22 +10,18 @@ export function SuperAdminShell() {
 
   return (
     <div className="min-h-screen bg-bg">
-      <header className="sticky top-0 z-40 bg-ink-900 text-white">
-        <div className="flex items-center gap-3 px-6 h-16 max-w-[1400px] mx-auto">
-          <div className="h-8 w-8 rounded-lg bg-gradient-primary flex items-center justify-center">
-            <ShieldCheck size={16} />
-          </div>
-          <div>
-            <p className="font-display font-semibold leading-tight">DistriCall</p>
-            <p className="text-[11px] text-white/50 leading-tight">Super Admin</p>
-          </div>
+      <header className="sticky top-0 z-40 border-b border-white/10 bg-primary-dark text-white shadow-[0_8px_30px_-24px_rgba(7,24,40,0.8)]">
+        <div className="mx-auto flex h-16 max-w-[1500px] items-center gap-3 px-4 sm:px-6">
+          <BrandLogo size={36} inverse subtitle="Platform administration" />
 
           <div className="ml-auto relative">
             <button
               onClick={() => setMenuOpen((v) => !v)}
-              className="flex items-center gap-2 pl-2 pr-1 py-1 rounded-full hover:bg-white/10"
+              className="flex min-h-10 items-center gap-2 rounded-lg py-1 pl-2 pr-1 hover:bg-white/10"
+              aria-label="Open platform account menu"
+              aria-expanded={menuOpen}
             >
-              <div className="h-8 w-8 rounded-full bg-gradient-primary text-white flex items-center justify-center text-xs font-semibold">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-xs font-bold text-primary-dark">
                 {user?.name?.slice(0, 2).toUpperCase() ?? "SA"}
               </div>
               <ChevronDown size={14} className="text-white/70" />
@@ -50,7 +47,7 @@ export function SuperAdminShell() {
           </div>
         </div>
       </header>
-      <main className="px-6 py-6 max-w-[1400px] mx-auto">
+      <main className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:py-8">
         <Outlet />
       </main>
     </div>

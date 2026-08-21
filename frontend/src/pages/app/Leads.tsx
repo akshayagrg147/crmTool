@@ -166,10 +166,10 @@ export function LeadsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="page-eyebrow mb-1">Workspace / Pipeline</p>
-          <h1 className="text-2xl font-display font-semibold text-ink-900">{isTelecaller ? "My Leads" : "Leads"}</h1>
-          <p className="text-sm text-ink-500 mt-0.5">{data ? `${data.total} total leads` : "Loading..."}</p>
+          <h1 className="page-title">{isTelecaller ? "My Leads" : "Leads"}</h1>
+          <p className="page-subtitle">{data ? `${data.total} total leads` : "Loading..."}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
           {canManage && (
             <>
               {canAdmin && (
@@ -180,7 +180,7 @@ export function LeadsPage() {
                   <button className="btn-secondary text-sm" onClick={handleExport} disabled={exporting}>
                     <Download size={16} /> {exporting ? "Exporting..." : "Export"}
                   </button>
-                  <button className="btn-secondary text-sm" onClick={() => setShowClearAll(true)}>
+                  <button className="btn-secondary text-sm text-danger hover:border-danger/30 hover:bg-danger/5 hover:text-danger" onClick={() => setShowClearAll(true)}>
                     <Trash2 size={16} /> Clear All
                   </button>
                 </>
@@ -196,11 +196,12 @@ export function LeadsPage() {
         </div>
       </div>
 
-      <div className="card p-4 flex flex-wrap items-center gap-2.5">
-        <div className="relative flex-1 min-w-[200px]">
+      <div className="filter-bar">
+        <div className="relative min-w-[220px] flex-1 basis-full sm:basis-auto">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-300" />
           <input
             className="input pl-8 py-2"
+            aria-label="Search leads"
             placeholder="Search by name, phone, city..."
             value={search}
             onChange={(e) => {
@@ -213,7 +214,7 @@ export function LeadsPage() {
             }}
           />
         </div>
-        <select className="input py-2 w-auto" value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value as LeadSource | "")}>
+        <select aria-label="Filter by source" className="input w-full py-2 sm:w-auto" value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value as LeadSource | "")}>
           <option value="">All Sources</option>
           <option value="manual">Manual</option>
           <option value="indiamart">IndiaMART</option>
@@ -222,7 +223,7 @@ export function LeadsPage() {
           <option value="website">Website</option>
           <option value="referral">Referral</option>
         </select>
-        <select className="input py-2 w-auto" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as LeadStatus | "")}>
+        <select aria-label="Filter by status" className="input w-full py-2 sm:w-auto" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as LeadStatus | "")}>
           <option value="">All Statuses</option>
           <option value="new">New</option>
           <option value="follow_up">Follow Up</option>
@@ -231,7 +232,7 @@ export function LeadsPage() {
           <option value="lost">Lost</option>
         </select>
         {!isTelecaller && (
-          <select className="input py-2 w-auto" value={assigneeFilter} onChange={(e) => setAssigneeFilter(e.target.value)}>
+          <select aria-label="Filter by assignee" className="input w-full py-2 sm:w-auto" value={assigneeFilter} onChange={(e) => setAssigneeFilter(e.target.value)}>
             <option value="">All Assignees</option>
             {workspaceManagers.length > 0 && (
               <optgroup label="Managers">
@@ -254,7 +255,8 @@ export function LeadsPage() {
           </select>
         )}
         <select
-          className="input py-2 w-auto"
+          className="input w-full py-2 sm:w-auto"
+          aria-label="Filter by category"
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value as LeadCategory | "")}
         >
@@ -266,7 +268,7 @@ export function LeadsPage() {
           ))}
         </select>
         {!!usedCities?.length && (
-          <select className="input py-2 w-auto" value={cityFilter} onChange={(e) => setCityFilter(e.target.value)}>
+          <select aria-label="Filter by city" className="input w-full py-2 sm:w-auto" value={cityFilter} onChange={(e) => setCityFilter(e.target.value)}>
             <option value="">All Cities</option>
             {usedCities.map((c) => (
               <option key={c} value={c}>
@@ -276,7 +278,8 @@ export function LeadsPage() {
           </select>
         )}
         <select
-          className="input py-2 w-auto"
+          className="input w-full py-2 sm:w-auto"
+          aria-label="Filter by callback schedule"
           value={callbackFilter}
           onChange={(e) => setCallbackFilter(e.target.value as "" | "scheduled" | "overdue")}
         >
@@ -303,7 +306,48 @@ export function LeadsPage() {
             }
           />
         ) : (
-          <div className={`overflow-x-auto scroll-shadow-x transition-opacity duration-200 ${isPlaceholderData ? "opacity-60" : ""}`}>
+          <div className={`transition-opacity duration-200 ${isPlaceholderData ? "opacity-60" : ""}`}>
+            <div className="divide-y divide-ink-100 md:hidden">
+              {data.items.map((lead) => (
+                <article key={lead.id} className="p-4">
+                  <button type="button" className="flex w-full items-start gap-3 text-left" onClick={() => setDetailLead(lead)}>
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-xs font-bold text-primary">
+                      {initials(lead.name)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <h2 className="font-semibold text-ink-900">{lead.name}</h2>
+                        {lead.dnd && <DndBadge />}
+                      </div>
+                      <p className="mt-0.5 text-xs text-ink-500">{lead.phone}{lead.city ? ` · ${lead.city}` : ""}</p>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        <StatusBadge status={lead.status} />
+                        <CategoryBadge category={lead.category} />
+                        <SourceBadge source={lead.source} />
+                      </div>
+                    </div>
+                  </button>
+                  <dl className="mt-3 grid grid-cols-2 gap-2 rounded-lg border border-ink-100 bg-[#F8F7F3] p-3 text-xs">
+                    {!isTelecaller && <div><dt className="text-ink-400">Assigned to</dt><dd className="mt-0.5 font-medium text-ink-700">{lead.assignee_name ?? "Unassigned"}</dd></div>}
+                    <div><dt className="text-ink-400">Added</dt><dd className="mt-0.5 font-medium text-ink-700">{formatDate(lead.created_at)}</dd></div>
+                    <div><dt className="text-ink-400">Last call</dt><dd className="mt-0.5 font-medium text-ink-700">{lead.last_call ? formatDateTime(lead.last_call.created_at) : "No calls yet"}</dd></div>
+                    {lead.next_follow_up_at && <div><dt className="text-ink-400">Next callback</dt><dd className={`mt-0.5 font-medium ${new Date(lead.next_follow_up_at) < new Date() ? "text-danger" : "text-ink-700"}`}>{new Date(lead.next_follow_up_at) < new Date() ? "Overdue" : formatCallbackTime(lead.next_follow_up_at)}</dd></div>}
+                  </dl>
+                  <div className="mt-3 flex items-center justify-end gap-1">
+                    <a aria-label={`Chat with ${lead.name} on WhatsApp`} href={whatsappLink(lead.phone)} target="_blank" rel="noopener noreferrer" className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-success hover:bg-success/10">
+                      <MessageCircle size={17} />
+                    </a>
+                    <button aria-label={`Log call for ${lead.name}`} className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-primary hover:bg-primary-soft" onClick={() => { setCallModalLead(lead); setCallModalOutcome(undefined); }}>
+                      <PhoneCall size={17} />
+                    </button>
+                    <button aria-label={`More actions for ${lead.name}`} className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-ink-500 hover:bg-ink-50" onClick={(e) => { setMenuAnchor(e.currentTarget); setMenuLead(menuLead?.id === lead.id ? null : lead); }}>
+                      <MoreVertical size={17} />
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+            <div className="hidden overflow-x-auto scroll-shadow-x md:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-ink-500 text-xs uppercase tracking-wide">
@@ -322,8 +366,7 @@ export function LeadsPage() {
                 {data.items.map((lead, i) => (
                   <tr
                     key={lead.id}
-                    className="border-t border-ink-100 hover:bg-bg/60 transition-colors duration-150 animate-fade-in"
-                    style={{ animationDelay: `${Math.min(i, 10) * 30}ms` }}
+                    className="border-t border-ink-100 transition-colors duration-150 hover:bg-bg/60"
                   >
                     <td className="px-5 py-3 text-ink-500 tabular-nums">{(page - 1) * PAGE_SIZE + i + 1}</td>
                     <td className="px-5 py-3 text-ink-700 text-xs whitespace-nowrap">{formatDate(lead.created_at)}</td>
@@ -390,6 +433,7 @@ export function LeadsPage() {
                       <div className="flex items-center justify-end gap-1">
                         <a
                           title="Chat on WhatsApp"
+                          aria-label={`Chat with ${lead.name} on WhatsApp`}
                           href={whatsappLink(lead.phone)}
                           target="_blank"
                           rel="noopener noreferrer"
@@ -400,6 +444,7 @@ export function LeadsPage() {
                         </a>
                         <button
                           title="Log Call"
+                          aria-label={`Log call for ${lead.name}`}
                           className="p-1.5 rounded-full hover:bg-primary/10 text-primary"
                           onClick={() => {
                             setCallModalLead(lead);
@@ -410,6 +455,7 @@ export function LeadsPage() {
                         </button>
                         <button
                           title="More actions"
+                          aria-label={`More actions for ${lead.name}`}
                           className="p-1.5 rounded-full hover:bg-ink-100 text-ink-500"
                           onClick={(e) => {
                             setMenuAnchor(e.currentTarget);
@@ -424,6 +470,7 @@ export function LeadsPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </div>

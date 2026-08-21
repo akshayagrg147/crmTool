@@ -39,26 +39,32 @@ export function CategoryManagerModal({ open, onClose }: { open: boolean; onClose
           </p>
         </div>
 
-        <div className="flex gap-2">
-          <input
-            className="input flex-1"
-            placeholder="e.g. High Value, Hospital Chain"
-            value={name}
-            maxLength={100}
-            onChange={(event) => setName(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && name.trim() && !mutation.isPending) mutation.mutate();
-            }}
-          />
-          <button className="btn-primary shrink-0" disabled={!name.trim() || mutation.isPending} onClick={() => mutation.mutate()}>
-            <Plus size={16} /> {mutation.isPending ? "Adding..." : "Add"}
-          </button>
+        <div>
+          <label htmlFor="new-category-name" className="mb-1.5 block text-xs font-medium text-ink-500">New category name</label>
+          <div className="flex gap-2">
+            <input
+              id="new-category-name"
+              className="input flex-1"
+              placeholder="e.g. High Value, Hospital Chain"
+              value={name}
+              maxLength={100}
+              onChange={(event) => setName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && name.trim() && !mutation.isPending) mutation.mutate();
+              }}
+            />
+            <button className="btn-primary shrink-0" disabled={!name.trim() || mutation.isPending} onClick={() => mutation.mutate()}>
+              <Plus size={16} /> {mutation.isPending ? "Adding..." : "Add"}
+            </button>
+          </div>
         </div>
 
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-ink-400 mb-2">Available categories</p>
           {isLoading ? (
             <p className="text-sm text-ink-400">Loading categories...</p>
+          ) : !categories?.length ? (
+            <p className="rounded-lg border border-dashed border-ink-100 px-3 py-5 text-center text-sm text-ink-400">No categories are available yet.</p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {categories?.map((category) => (

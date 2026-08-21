@@ -21,8 +21,10 @@ export function NotificationsDropdown() {
   return (
     <div className="relative">
       <button
-        className="p-2 rounded-full hover:bg-ink-100 text-ink-500 relative transition-all duration-200 active:scale-90"
+        className="relative flex h-10 w-10 items-center justify-center rounded-lg text-ink-500 transition-colors duration-150 hover:bg-primary-soft hover:text-primary"
         title="Notifications"
+        aria-label="Open notifications"
+        aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
         <Bell size={18} />
@@ -35,8 +37,8 @@ export function NotificationsDropdown() {
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 mt-2 w-80 card p-0 z-20 shadow-popover origin-top-right animate-scale-in overflow-hidden">
-            <div className="px-4 py-3 border-b border-ink-100">
+          <div className="absolute right-0 z-20 mt-2 w-[min(20rem,calc(100vw-2rem))] origin-top-right overflow-hidden card p-0 shadow-popover animate-scale-in">
+            <div className="border-b border-ink-100 bg-[#F8F7F3] px-4 py-3">
               <p className="text-sm font-semibold text-ink-900">Notifications</p>
             </div>
             <div className="max-h-80 overflow-y-auto">
@@ -51,7 +53,7 @@ export function NotificationsDropdown() {
                     <Link
                       to="/leads"
                       onClick={() => setOpen(false)}
-                      className="flex items-start gap-3 px-4 py-3 hover:bg-bg transition-colors"
+                      className="flex items-start gap-3 px-4 py-3 transition-colors hover:bg-primary-soft/40"
                     >
                       <div className="h-8 w-8 rounded-full bg-warning/10 text-warning flex items-center justify-center shrink-0">
                         <AlertTriangle size={15} />
@@ -71,7 +73,7 @@ export function NotificationsDropdown() {
                       to="/leads?status=follow_up"
                       key={f.id}
                       onClick={() => setOpen(false)}
-                      className="flex items-start gap-3 px-4 py-3 hover:bg-bg transition-colors"
+                      className="flex items-start gap-3 px-4 py-3 transition-colors hover:bg-primary-soft/40"
                     >
                       <div className="h-8 w-8 rounded-full bg-secondary/10 text-secondary flex items-center justify-center shrink-0">
                         <CalendarClock size={15} />

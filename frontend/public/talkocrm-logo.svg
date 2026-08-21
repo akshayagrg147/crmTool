@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 80" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">TalkoCRM</title>
+  <desc id="desc">TalkoCRM conversation-frame logo in navy and brass</desc>
+  <g transform="translate(8 8) scale(1.333333)">
+    <rect width="48" height="48" rx="12" fill="#173A5E"/>
+    <path d="M12.5 12.5h23c4.42 0 8 3.58 8 8v8c0 4.42-3.58 8-8 8h-7.2l-7.8 5v-5a8 8 0 0 1-8-8v-16Z" stroke="#F8F4EA" stroke-width="2.25" stroke-linejoin="round"/>
+    <path d="M19 20h14" stroke="#C99B4A" stroke-width="3" stroke-linecap="round"/>
+    <path d="M26 20v10.5" stroke="#F8F4EA" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="34.5" cy="30.5" r="1.8" fill="#C99B4A"/>
+  </g>
+  <text x="88" y="37" font-family="DM Sans, Arial, sans-serif" font-size="29" font-weight="700" letter-spacing="-1.15"><tspan fill="#173A5E">Talko</tspan><tspan fill="#B8893A">CRM</tspan></text>
+  <text x="88" y="56" fill="#9AA4AC" font-family="DM Sans, Arial, sans-serif" font-size="9" font-weight="700" letter-spacing="1.6">CONVERSATION-LED CRM</text>
+</svg>

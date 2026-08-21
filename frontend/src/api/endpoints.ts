@@ -17,6 +17,7 @@ import type {
   PaginatedLostDeals,
   MyOrganization,
   OrganizationOut,
+  OrganizationDetailsOut,
   PaginatedFollowUps,
   PaginatedLeads,
   PlatformStats,
@@ -32,9 +33,13 @@ export interface TokenPair {
 }
 
 export const authApi = {
-  login: (phone: string, password: string) =>
+  login: (phone: string, password: string, countryCode?: string) =>
     apiClient
-      .post<{ tokens: TokenPair; user: UserOut; organization_name: string | null }>("/auth/login", { phone, password })
+      .post<{ tokens: TokenPair; user: UserOut; organization_name: string | null }>("/auth/login", {
+        phone,
+        password,
+        country_code: countryCode,
+      })
       .then((r) => r.data),
   me: () => apiClient.get<UserOut>("/auth/me").then((r) => r.data),
   impersonationStatus: () =>
@@ -56,11 +61,11 @@ export const usersApi = {
   create: (payload: {
     name: string;
     phone: string;
-    email?: string;
+    email: string;
     role: UserRole;
-    password?: string;
-    state?: string | null;
-    city?: string | null;
+    password: string;
+    state: string;
+    city: string;
   }) => apiClient.post<TeamMemberOut>("/users", payload).then((r) => r.data),
   update: (
     id: string,
@@ -207,6 +212,7 @@ export const integrationsApi = {
 
 export const superAdminApi = {
   listOrganizations: () => apiClient.get<OrganizationOut[]>("/super-admin/organizations").then((r) => r.data),
+  getOrganization: (id: string) => apiClient.get<OrganizationDetailsOut>(`/super-admin/organizations/${id}`).then((r) => r.data),
   createOrganization: (payload: {
     name: string;
     admin_name: string;
@@ -214,6 +220,19 @@ export const superAdminApi = {
     admin_email?: string;
     admin_password: string;
   }) => apiClient.post<OrganizationOut>("/super-admin/organizations", payload).then((r) => r.data),
+  updateOrganization: (
+    id: string,
+    payload: {
+      name: string;
+      plan: "trial" | "starter" | "professional" | "enterprise";
+      admin_name: string;
+      admin_phone: string;
+      admin_email: string | null;
+      admin_password?: string;
+    }
+  ) => apiClient.patch<OrganizationDetailsOut>(`/super-admin/organizations/${id}`, payload).then((r) => r.data),
+  deleteOrganization: (id: string, confirmName: string) =>
+    apiClient.delete(`/super-admin/organizations/${id}`, { params: { confirm_name: confirmName } }).then((r) => r.data),
   suspend: (id: string) => apiClient.post<OrganizationOut>(`/super-admin/organizations/${id}/suspend`).then((r) => r.data),
   reactivate: (id: string) =>
     apiClient.post<OrganizationOut>(`/super-admin/organizations/${id}/reactivate`).then((r) => r.data),

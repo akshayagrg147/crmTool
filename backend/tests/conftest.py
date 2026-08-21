@@ -22,6 +22,7 @@ database_module.engine = test_engine
 database_module.AsyncSessionLocal = TestSessionLocal
 
 from app.core.database import Base, get_db  # noqa: E402
+from app.core.limiter import limiter  # noqa: E402
 from app.main import app  # noqa: E402
 from app.core.security import hash_password  # noqa: E402
 from app.models.organization import Organization  # noqa: E402
@@ -39,6 +40,9 @@ app.dependency_overrides[get_db] = override_get_db
 
 @pytest_asyncio.fixture(autouse=True)
 async def setup_db():
+    # Login limits are process-global in SlowAPI's in-memory storage. Reset
+    # between tests so an unrelated test cannot exhaust another test's quota.
+    limiter.reset()
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)

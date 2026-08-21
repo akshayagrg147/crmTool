@@ -1,8 +1,8 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -13,9 +13,40 @@ from app.models.lead import Lead
 from app.models.organization import Organization
 from app.models.user import User, UserRole
 from app.schemas.auth import TokenPair
-from app.schemas.organization import ImpersonateRequest, OrganizationCreate, OrganizationOut, PlatformStats
+from app.schemas.organization import (
+    ImpersonateRequest,
+    OrganizationCreate,
+    OrganizationDetailsOut,
+    OrganizationMemberOut,
+    OrganizationOut,
+    OrganizationUpdate,
+    PlatformStats,
+)
 
 router = APIRouter(prefix="/super-admin", tags=["super-admin"])
+
+
+async def _organization_details(org: Organization, db: AsyncSession) -> OrganizationDetailsOut:
+    members_result = await db.execute(
+        select(User)
+        .where(User.organization_id == org.id)
+        .order_by(User.role, User.created_at)
+    )
+    members = [OrganizationMemberOut.model_validate(member) for member in members_result.scalars().all()]
+    lead_count = (await db.execute(
+        select(func.count()).select_from(Lead).where(Lead.organization_id == org.id)
+    )).scalar_one()
+
+    return OrganizationDetailsOut(
+        id=org.id,
+        name=org.name,
+        is_active=org.is_active,
+        plan=org.plan,
+        created_at=org.created_at,
+        user_count=len(members),
+        lead_count=lead_count,
+        members=members,
+    )
 
 
 @router.get("/organizations", response_model=list[OrganizationOut])
@@ -35,6 +66,20 @@ async def list_organizations(current: CurrentUser = Depends(require_super_admin)
         item.lead_count = lead_count
         out.append(item)
     return out
+
+
+@router.get("/organizations/{org_id}", response_model=OrganizationDetailsOut)
+async def get_organization(
+    org_id: uuid.UUID,
+    current: CurrentUser = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Organization).where(Organization.id == org_id))
+    org = result.scalar_one_or_none()
+    if org is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Organization not found")
+
+    return await _organization_details(org, db)
 
 
 @router.post("/organizations", response_model=OrganizationOut, status_code=status.HTTP_201_CREATED)
@@ -69,6 +114,65 @@ async def create_organization(
     out.user_count = 1
     out.lead_count = 0
     return out
+
+
+@router.patch("/organizations/{org_id}", response_model=OrganizationDetailsOut)
+async def update_organization(
+    org_id: uuid.UUID,
+    payload: OrganizationUpdate,
+    current: CurrentUser = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Organization).where(Organization.id == org_id))
+    org = result.scalar_one_or_none()
+    if org is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Organization not found")
+
+    admin_result = await db.execute(
+        select(User)
+        .where(User.organization_id == org.id, User.role == UserRole.admin)
+        .order_by(User.created_at)
+    )
+    admin = admin_result.scalars().first()
+    if admin is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "This organization has no administrator to update")
+
+    duplicate_phone = await db.execute(
+        select(User.id).where(User.phone == payload.admin_phone.strip(), User.id != admin.id)
+    )
+    if duplicate_phone.scalar_one_or_none() is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "A user with this phone number already exists")
+
+    org.name = payload.name.strip()
+    org.plan = payload.plan
+    admin.name = payload.admin_name.strip()
+    admin.phone = payload.admin_phone.strip()
+    admin.email = str(payload.admin_email) if payload.admin_email else None
+    if payload.admin_password:
+        admin.password_hash = hash_password(payload.admin_password)
+    await db.commit()
+    await db.refresh(org)
+    return await _organization_details(org, db)
+
+
+@router.delete("/organizations/{org_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_organization(
+    org_id: uuid.UUID,
+    confirm_name: str = Query(min_length=1),
+    current: CurrentUser = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Organization).where(Organization.id == org_id))
+    org = result.scalar_one_or_none()
+    if org is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Organization not found")
+    if confirm_name != org.name:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Organization name confirmation does not match")
+
+    # Use a database delete so every organization-owned record follows its
+    # foreign-key ON DELETE CASCADE policy in one transaction.
+    await db.execute(delete(Organization).where(Organization.id == org.id))
+    await db.commit()
 
 
 @router.post("/organizations/{org_id}/suspend", response_model=OrganizationOut)

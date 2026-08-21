@@ -84,7 +84,7 @@ async def add_team_member(
         name=payload.name,
         phone=payload.phone,
         email=payload.email,
-        password_hash=hash_password(payload.password or "changeme123"),
+        password_hash=hash_password(payload.password),
         role=payload.role,
         is_active=True,
         state=payload.state,

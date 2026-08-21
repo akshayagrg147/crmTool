@@ -318,6 +318,20 @@ export interface OrganizationOut {
   lead_count: number;
 }
 
+export interface OrganizationMemberOut {
+  id: string;
+  name: string;
+  phone: string;
+  email: string | null;
+  role: UserRole;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface OrganizationDetailsOut extends OrganizationOut {
+  members: OrganizationMemberOut[];
+}
+
 export interface PlatformStats {
   total_organizations: number;
   total_users: number;

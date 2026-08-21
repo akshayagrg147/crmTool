@@ -1,6 +1,7 @@
 export function Spinner({ size = 20 }: { size?: number }) {
   return (
     <div
+      aria-hidden="true"
       className="animate-spin rounded-full border-2 border-ink-100 border-t-primary"
       style={{ width: size, height: size }}
     />
@@ -9,19 +10,20 @@ export function Spinner({ size = 20 }: { size?: number }) {
 
 export function PageLoading() {
   return (
-    <div className="flex items-center justify-center py-24 animate-fade-in">
+    <div className="flex items-center justify-center py-24 animate-fade-in" role="status" aria-live="polite">
       <Spinner size={28} />
+      <span className="sr-only">Loading workspace</span>
     </div>
   );
 }
 
 export function CardSkeleton() {
-  return <div className="card h-32 skeleton" />;
+  return <div className="card h-32 skeleton" aria-hidden="true" />;
 }
 
 export function KpiRowSkeleton({ count = 4 }: { count?: number }) {
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 animate-fade-in">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 animate-fade-in" aria-hidden="true">
       {Array.from({ length: count }).map((_, i) => (
         <div key={i} className="card p-5">
           <div className="flex items-start justify-between mb-4">
@@ -37,7 +39,7 @@ export function KpiRowSkeleton({ count = 4 }: { count?: number }) {
 
 export function TableSkeleton({ rows = 6, cols = 4 }: { rows?: number; cols?: number }) {
   return (
-    <div className="p-2 animate-fade-in">
+    <div className="p-2 animate-fade-in" aria-hidden="true">
       {Array.from({ length: rows }).map((_, r) => (
         <div key={r} className="flex items-center gap-6 px-3 py-3.5 border-b border-ink-100 last:border-0">
           <div className="skeleton h-9 w-9 rounded-full shrink-0" />

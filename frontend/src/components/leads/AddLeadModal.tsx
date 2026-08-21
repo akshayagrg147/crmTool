@@ -124,13 +124,14 @@ export function AddLeadModal({ open, onClose }: { open: boolean; onClose: () => 
       }
     >
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+        <div className="sm:col-span-2"><p className="section-label">Contact and location</p></div>
         <div>
-          <label className="text-xs font-medium text-ink-500 mb-1.5 block">Name</label>
-          <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <label htmlFor="add-lead-name" className="text-xs font-medium text-ink-500 mb-1.5 block">Name <span className="text-danger">*</span></label>
+          <input id="add-lead-name" className="input" autoComplete="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </div>
         <div>
-          <label className="text-xs font-medium text-ink-500 mb-1.5 block">Phone</label>
-          <input className="input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+          <label htmlFor="add-lead-phone" className="text-xs font-medium text-ink-500 mb-1.5 block">Phone <span className="text-danger">*</span></label>
+          <input id="add-lead-phone" className="input" type="tel" inputMode="tel" autoComplete="tel" required value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
         </div>
 
         {duplicates.length > 0 && (
@@ -167,9 +168,10 @@ export function AddLeadModal({ open, onClose }: { open: boolean; onClose: () => 
           </select>
         </div>
 
+        <div className="sm:col-span-2 border-t border-ink-100 pt-4"><p className="section-label">Interests and qualification</p></div>
         <div className="sm:col-span-2">
-          <label className="text-xs font-medium text-ink-500 mb-1.5 block">Categories of interest</label>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-lg border border-ink-100 p-3">
+          <p className="text-xs font-medium text-ink-500 mb-1.5">Categories of interest <span className="text-danger">*</span></p>
+          <div className="grid grid-cols-1 gap-2 rounded-lg border border-ink-100 bg-[#FCFCFA] p-3 sm:grid-cols-2">
             {categoryOptions.map((c) => {
               const checked = form.interested_categories.includes(c.value);
               return (
@@ -212,6 +214,7 @@ export function AddLeadModal({ open, onClose }: { open: boolean; onClose: () => 
             onChange={(e) => setForm({ ...form, drug_license_number: e.target.value })}
           />
         </div>
+        <div className="sm:col-span-2 border-t border-ink-100 pt-4"><p className="section-label">Commercial and compliance</p></div>
         <div>
           <label className="text-xs font-medium text-ink-500 mb-1.5 block">Credit limit (₹)</label>
           <input
@@ -259,7 +262,7 @@ export function AddLeadModal({ open, onClose }: { open: boolean; onClose: () => 
           </label>
         </div>
 
-        <div className="sm:col-span-2">
+        <div className="sm:col-span-2 border-t border-ink-100 pt-4">
           <label className="text-xs font-medium text-ink-500 mb-1.5 block">Note (optional)</label>
           <textarea
             className="input min-h-[70px]"

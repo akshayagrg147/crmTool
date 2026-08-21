@@ -85,15 +85,16 @@ export function IntegrationsPage() {
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <h1 className="text-2xl font-display font-semibold text-ink-900">Lead Sources</h1>
-        <p className="text-sm text-ink-500 mt-0.5">
+        <p className="page-eyebrow mb-1">Workspace / Connections</p>
+        <h1 className="page-title">Lead Sources</h1>
+        <p className="page-subtitle max-w-3xl">
           Connect IndiaMART and JustDial so enquiries flow in automatically — no Excel upload needed.
           New leads are auto-assigned to your telecallers in the same round-robin rotation.
         </p>
       </div>
 
       {!isAdmin && (
-        <div className="card border border-warning/30 bg-warning/5 p-4 flex items-start gap-3">
+        <div className="flex items-start gap-3 rounded-[10px] border border-warning/25 bg-warning/5 p-4">
           <AlertTriangle size={18} className="text-warning shrink-0 mt-0.5" />
           <p className="text-sm text-ink-700">
             Only an admin can connect or change lead sources. You can see their status here.
@@ -103,10 +104,10 @@ export function IntegrationsPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {data.map((it) => (
-          <div key={it.provider} className="card p-5 flex flex-col gap-4">
+          <div key={it.provider} className="card flex flex-col gap-5 p-5 sm:p-6">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-start gap-3">
-                <div className="h-10 w-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[9px] border border-primary/10 bg-primary-soft text-primary">
                   {it.ingestion === "push" ? <Webhook size={18} /> : <Download size={18} />}
                 </div>
                 <div>
@@ -124,7 +125,7 @@ export function IntegrationsPage() {
             </div>
 
             {it.is_connected && (
-              <div className="grid grid-cols-3 gap-3 text-center">
+              <div className="grid grid-cols-1 gap-2 text-left sm:grid-cols-3 sm:text-center">
                 <Stat label="Imported" value={it.total_imported} />
                 <Stat label="Duplicates skipped" value={it.total_duplicates} />
                 <Stat
@@ -153,6 +154,7 @@ export function IntegrationsPage() {
                     className="btn-secondary shrink-0"
                     onClick={() => copy(it.webhook_url!, it.provider)}
                     title="Copy"
+                    aria-label={`Copy ${it.label} webhook URL`}
                   >
                     {copied === it.provider ? <Check size={15} /> : <Copy size={15} />}
                   </button>
@@ -183,8 +185,8 @@ export function IntegrationsPage() {
                   disabled={syncMutation.isPending}
                   onClick={() => syncMutation.mutate(it.provider)}
                 >
-                  <RefreshCw size={15} className={syncMutation.isPending ? "animate-spin" : ""} />
-                  {syncMutation.isPending ? "Syncing..." : "Sync now"}
+                  <RefreshCw size={15} className={syncMutation.isPending && syncMutation.variables === it.provider ? "animate-spin" : ""} />
+                  {syncMutation.isPending && syncMutation.variables === it.provider ? "Syncing..." : "Sync now"}
                 </button>
               )}
               {isAdmin && it.is_connected && (
@@ -231,11 +233,12 @@ export function IntegrationsPage() {
             <p className="text-sm text-ink-500">{connecting.setup_hint}</p>
             {connecting.credential_fields.map((f) => (
               <div key={f.key}>
-                <label className="text-xs font-medium text-ink-500 mb-1.5 block">
+                <label htmlFor={`credential-${connecting.provider}-${f.key}`} className="text-xs font-medium text-ink-500 mb-1.5 block">
                   {f.label}
                   {!f.required && <span className="text-ink-300"> (optional)</span>}
                 </label>
                 <input
+                  id={`credential-${connecting.provider}-${f.key}`}
                   className="input"
                   type={f.secret ? "password" : "text"}
                   autoComplete="off"
@@ -287,7 +290,7 @@ function StatusPill({ it }: { it: IntegrationOut }) {
 
 function Stat({ label, value, small }: { label: string; value: string | number; small?: boolean }) {
   return (
-    <div className="rounded-lg bg-ink-50 border border-ink-100 py-2.5 px-2">
+    <div className="rounded-lg border border-ink-100 bg-[#F8F7F3] px-3 py-2.5">
       <p className={`font-semibold text-ink-900 tabular-nums ${small ? "text-xs" : "text-lg"}`}>{value}</p>
       <p className="text-[11px] text-ink-500 mt-0.5">{label}</p>
     </div>

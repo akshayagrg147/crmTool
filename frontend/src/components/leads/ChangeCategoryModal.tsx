@@ -62,9 +62,13 @@ export function ChangeCategoryModal({
       }
     >
       <div>
-        <label className="text-xs font-medium text-ink-500 mb-1.5 block">Categories of interest</label>
-        <div className="grid grid-cols-1 gap-2 rounded-lg border border-ink-100 p-3">
-          {categories?.map((option) => {
+        <p className="text-xs font-medium text-ink-500 mb-1.5">Categories of interest</p>
+        <div className="grid grid-cols-1 gap-2 rounded-lg border border-ink-100 bg-[#FCFCFA] p-3">
+          {isLoading ? (
+            <p className="py-3 text-center text-sm text-ink-400">Loading categories…</p>
+          ) : !categories?.length ? (
+            <p className="py-3 text-center text-sm text-ink-400">No categories are available.</p>
+          ) : categories.map((option) => {
             const checked = selectedCategories.includes(option.value);
             return (
               <label key={option.value} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-ink-700 hover:bg-bg cursor-pointer">

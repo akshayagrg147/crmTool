@@ -1,4 +1,4 @@
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
 import { Modal } from "./Modal";
 
 interface ConfirmModalProps {
@@ -22,34 +22,45 @@ export function ConfirmModal({
   danger = true,
   isLoading = false,
 }: ConfirmModalProps) {
+  const Icon = danger ? AlertTriangle : CheckCircle2;
+
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={isLoading ? () => undefined : onClose}
       title={title}
       size="sm"
       footer={
         <>
-          <button className="btn-ghost" onClick={onClose} disabled={isLoading}>
+          <button type="button" className="btn-secondary" onClick={onClose} disabled={isLoading}>
             Cancel
           </button>
           <button
-            className={danger ? "btn-primary" : "btn-secondary"}
+            type="button"
+            className={danger ? "btn-danger" : "btn-primary"}
             onClick={onConfirm}
             disabled={isLoading}
+            aria-busy={isLoading}
           >
-            {isLoading ? "Please wait..." : confirmLabel}
+            {isLoading && <Loader2 size={16} className="animate-spin" aria-hidden="true" />}
+            {isLoading ? "Please wait…" : confirmLabel}
           </button>
         </>
       }
     >
-      <div className="flex gap-3">
-        <div className="shrink-0 h-10 w-10 rounded-full bg-danger/10 flex items-center justify-center animate-pulse-ring">
-          <AlertTriangle size={20} className="text-danger" />
+      <div className="flex items-start gap-4 py-1">
+        <div
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border ${
+            danger
+              ? "border-danger/20 bg-danger/[0.08] text-danger"
+              : "border-secondary/20 bg-secondary/10 text-secondary"
+          }`}
+        >
+          <Icon size={20} strokeWidth={1.8} aria-hidden="true" />
         </div>
-        <p className="text-sm text-ink-700 pt-2 animate-fade-in-up" style={{ animationDelay: "60ms" }}>
-          {message}
-        </p>
+        <div className="pt-0.5">
+          <p className="text-sm leading-6 text-ink-700">{message}</p>
+        </div>
       </div>
     </Modal>
   );

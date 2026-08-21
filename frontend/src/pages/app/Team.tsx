@@ -69,8 +69,8 @@ export function TeamPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="page-eyebrow mb-1">Workspace / People</p>
-          <h1 className="text-2xl font-display font-semibold text-ink-900">Team</h1>
-          <p className="text-sm text-ink-500 mt-0.5">{team?.length ?? 0} members</p>
+          <h1 className="page-title">Team</h1>
+          <p className="page-subtitle">{team?.length ?? 0} members across your organization</p>
         </div>
         {isAdmin && (
           <div className="flex items-center gap-2">
@@ -87,7 +87,8 @@ export function TeamPage() {
         ) : !team?.length ? (
           <EmptyState icon={Users2} title="No team members yet" message="Add your first team member to get started." />
         ) : (
-          <div className="overflow-x-auto scroll-shadow-x">
+          <>
+          <div className="hidden overflow-x-auto scroll-shadow-x md:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-ink-500 text-xs uppercase tracking-wide">
@@ -102,11 +103,10 @@ export function TeamPage() {
                 </tr>
               </thead>
               <tbody>
-                {team.map((m, i) => (
+                {team.map((m) => (
                   <tr
                     key={m.id}
-                    className="border-t border-ink-100 hover:bg-bg/60 transition-colors duration-150 animate-fade-in"
-                    style={{ animationDelay: `${Math.min(i, 10) * 30}ms` }}
+                    className="border-t border-ink-100 transition-colors duration-150 hover:bg-bg/60"
                   >
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-2.5">
@@ -130,6 +130,10 @@ export function TeamPage() {
                     <td className="px-5 py-3 text-ink-500">{formatDate(m.created_at)}</td>
                     <td className="px-5 py-3">
                       <button
+                        type="button"
+                        role="switch"
+                        aria-checked={m.is_active}
+                        aria-label={`${m.is_active ? "Deactivate" : "Activate"} ${m.name}`}
                         disabled={!isAdmin && user?.role !== "manager"}
                         onClick={() => toggleMutation.mutate({ id: m.id, is_active: !m.is_active })}
                         className={`relative h-6 w-11 rounded-pill transition ${
@@ -146,7 +150,8 @@ export function TeamPage() {
                     {isAdmin && (
                       <td className="px-5 py-3 text-right">
                         <button
-                          className="p-1.5 rounded-full hover:bg-danger/10 text-danger"
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-danger hover:bg-danger/10"
+                          aria-label={`Remove ${m.name}`}
                           onClick={() => setRemoveTarget(m)}
                         >
                           <Trash2 size={16} />
@@ -158,6 +163,49 @@ export function TeamPage() {
               </tbody>
             </table>
           </div>
+          <div className="divide-y divide-ink-100 md:hidden">
+            {team.map((m) => (
+              <article key={m.id} className="p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-bold text-white">
+                    {initials(m.name)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="font-semibold text-ink-900">{m.name}</h2>
+                      <span className={`badge ${roleBadgeClasses[m.role]}`}>{roleLabels[m.role]}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-ink-500">{m.phone}{m.email ? ` · ${m.email}` : ""}</p>
+                  </div>
+                </div>
+                <dl className="mt-4 grid grid-cols-2 gap-3 rounded-lg border border-ink-100 bg-[#F8F7F3] p-3 text-xs">
+                  <div><dt className="text-ink-400">Location</dt><dd className="mt-0.5 font-medium text-ink-700">{m.city ? `${m.city}${m.state ? `, ${m.state}` : ""}` : "—"}</dd></div>
+                  <div><dt className="text-ink-400">Active leads</dt><dd className="mt-0.5 font-medium text-ink-700">{m.active_leads_count}</dd></div>
+                  <div><dt className="text-ink-400">Joined</dt><dd className="mt-0.5 font-medium text-ink-700">{formatDate(m.created_at)}</dd></div>
+                  <div><dt className="text-ink-400">Status</dt><dd className="mt-0.5 font-medium text-ink-700">{m.is_active ? "Active" : "Inactive"}</dd></div>
+                </dl>
+                <div className="mt-3 flex items-center justify-between">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={m.is_active}
+                    disabled={!isAdmin && user?.role !== "manager"}
+                    onClick={() => toggleMutation.mutate({ id: m.id, is_active: !m.is_active })}
+                    className="btn-secondary min-h-10 text-xs"
+                  >
+                    <span className={`h-2 w-2 rounded-full ${m.is_active ? "bg-success" : "bg-ink-300"}`} />
+                    {m.is_active ? "Active" : "Inactive"}
+                  </button>
+                  {isAdmin && (
+                    <button className="btn-ghost min-h-10 text-danger" aria-label={`Remove ${m.name}`} onClick={() => setRemoveTarget(m)}>
+                      <Trash2 size={16} /> Remove
+                    </button>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+          </>
         )}
       </div>
 

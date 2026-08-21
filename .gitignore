@@ -6,6 +6,7 @@ __pycache__/
 
 # Env files
 .env
+.env.production
 backend/.env
 frontend/.env
 
@@ -16,6 +17,7 @@ frontend/node_modules/
 
 # Editor / OS
 .DS_Store
+._*
 .vscode/
 .idea/
 

@@ -51,24 +51,26 @@ export function FollowUpsPage() {
     <div className="flex flex-col gap-5">
       <div>
         <p className="page-eyebrow mb-1">Workspace / Next actions</p>
-        <h1 className="text-2xl font-display font-semibold text-ink-900">Follow-ups</h1>
-        <p className="text-sm text-ink-500 mt-0.5">
-          {data ? `${data.total} follow-up ${data.total === 1 ? "message" : "messages"}` : "Loading..."}
+        <h1 className="page-title">Follow-ups</h1>
+        <p className="page-subtitle">
+          {data ? `${data.total} follow-up ${data.total === 1 ? "record" : "records"}` : "Loading..."}
         </p>
       </div>
 
-      <div className="card p-4 flex flex-wrap items-center gap-2.5">
-        <div className="relative flex-1 min-w-[200px]">
+      <div className="filter-bar">
+        <div className="relative min-w-[220px] flex-1 basis-full sm:basis-auto">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-300" />
           <input
             className="input pl-8 py-2"
+            aria-label="Search follow-ups"
             placeholder="Search by lead name or phone..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
         <select
-          className="input py-2 w-auto"
+          className="input w-full py-2 sm:w-auto"
+          aria-label="Filter by outcome"
           value={outcomeFilter}
           onChange={(e) => setOutcomeFilter(e.target.value as LeadStatus | "")}
         >
@@ -79,7 +81,7 @@ export function FollowUpsPage() {
           <option value="lost">Lost</option>
         </select>
         {!isTelecaller && (
-          <select className="input py-2 w-auto" value={telecallerFilter} onChange={(e) => setTelecallerFilter(e.target.value)}>
+          <select aria-label="Filter by telecaller" className="input w-full py-2 sm:w-auto" value={telecallerFilter} onChange={(e) => setTelecallerFilter(e.target.value)}>
             <option value="">All Telecallers</option>
             {telecallers.map((t) => (
               <option key={t.id} value={t.id}>
@@ -88,9 +90,11 @@ export function FollowUpsPage() {
             ))}
           </select>
         )}
-        <input type="date" className="input py-2 w-auto" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-        <span className="text-ink-300 text-sm">to</span>
-        <input type="date" className="input py-2 w-auto" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+        <div className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2 sm:w-auto">
+          <input aria-label="Follow-ups from date" type="date" className="input py-2" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          <span className="text-xs font-medium text-ink-400">to</span>
+          <input aria-label="Follow-ups to date" type="date" className="input py-2" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+        </div>
       </div>
 
       <div className="card">
@@ -105,10 +109,10 @@ export function FollowUpsPage() {
         ) : (
           <div className={`divide-y divide-ink-100 transition-opacity duration-200 ${isPlaceholderData ? "opacity-60" : ""}`}>
             {data.items.map((f) => (
-              <div key={f.id} className="px-5 py-4 flex flex-col gap-2">
+              <div key={f.id} className="flex flex-col gap-2 px-4 py-4 transition-colors hover:bg-[#FAFAF7] sm:px-5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2.5">
-                    <div className="h-8 w-8 rounded-full bg-badge-indigo/10 text-badge-indigo flex items-center justify-center text-[11px] font-semibold shrink-0">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-[11px] font-bold text-primary">
                       {f.lead_name.slice(0, 2).toUpperCase()}
                     </div>
                     <div>

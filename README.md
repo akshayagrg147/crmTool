@@ -1,4 +1,4 @@
-# DistriCall
+# TalkoCRM
 
 A lead-management & telecalling CRM for telecaller teams — Web App, Admin Panel (role-gated section of the Web App), and a separate Super Admin Panel for the platform owner.
 
@@ -106,3 +106,9 @@ The web app is now live at `http://localhost:5173`.
 - Telecallers can reassign only their own leads, and only to an active Manager in the same organization. Admins and Managers retain their existing reassignment controls.
 - Telecallers can mark a lead as Lost with a required reason and manager handoff; Admins and Managers can review the resulting Lost Deals table and filter it by reporting telecaller.
 - Real telephony, billing, and Firebase/BaaS integrations are intentionally out of scope for this phase.
+
+## Production deployment
+
+For the single-instance AWS EC2 deployment, use [DEPLOY_AWS_EC2.md](./DEPLOY_AWS_EC2.md).
+The production Compose stack exposes only the Nginx frontend on port 80; FastAPI
+and PostgreSQL remain on a private Docker network.

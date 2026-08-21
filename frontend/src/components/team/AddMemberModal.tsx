@@ -28,13 +28,13 @@ export function AddMemberModal({ open, onClose }: { open: boolean; onClose: () =
   const mutation = useMutation({
     mutationFn: () =>
       usersApi.create({
-        name: form.name,
-        phone: form.phone,
-        email: form.email || undefined,
+        name: form.name.trim(),
+        phone: form.phone.trim(),
+        email: form.email.trim(),
         role: form.role,
-        password: form.password || undefined,
-        state: form.state || null,
-        city: form.city || null,
+        password: form.password,
+        state: form.state,
+        city: form.city.trim(),
       }),
     onSuccess: (member) => {
       queryClient.invalidateQueries({ queryKey: ["team"] });
@@ -44,6 +44,15 @@ export function AddMemberModal({ open, onClose }: { open: boolean; onClose: () =
     },
     onError: (err: any) => toast(err?.response?.data?.detail ?? "Couldn't add team member.", "error"),
   });
+
+  const canSubmit =
+    !!form.name.trim() &&
+    !!form.phone.trim() &&
+    !!form.email.trim() &&
+    !!form.role &&
+    !!form.state &&
+    !!form.city.trim() &&
+    form.password.length >= 6;
 
   return (
     <Modal
@@ -56,36 +65,47 @@ export function AddMemberModal({ open, onClose }: { open: boolean; onClose: () =
             Cancel
           </button>
           <button
+            type="submit"
+            form="add-team-member-form"
             className="btn-primary"
-            disabled={!form.name || !form.phone || mutation.isPending}
-            onClick={() => mutation.mutate()}
+            disabled={!canSubmit || mutation.isPending}
           >
             {mutation.isPending ? "Adding..." : "Add Member"}
           </button>
         </>
       }
     >
-      <div className="flex flex-col gap-3.5">
+      <form
+        id="add-team-member-form"
+        className="flex flex-col gap-3.5"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (canSubmit && !mutation.isPending) mutation.mutate();
+        }}
+      >
         <div>
-          <label className="text-xs font-medium text-ink-500 mb-1.5 block">Name</label>
-          <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <label htmlFor="member-name" className="text-xs font-medium text-ink-500 mb-1.5 block">Name <span className="text-danger">*</span></label>
+          <input id="member-name" className="input" autoComplete="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </div>
         <div>
-          <label className="text-xs font-medium text-ink-500 mb-1.5 block">Phone</label>
-          <input className="input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+          <label htmlFor="member-phone" className="text-xs font-medium text-ink-500 mb-1.5 block">Phone <span className="text-danger">*</span></label>
+          <input id="member-phone" className="input" type="tel" inputMode="tel" autoComplete="tel" required minLength={6} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
         </div>
         <div>
-          <label className="text-xs font-medium text-ink-500 mb-1.5 block">Email (optional)</label>
+          <label htmlFor="member-email" className="text-xs font-medium text-ink-500 mb-1.5 block">Email <span className="text-danger">*</span></label>
           <input
+            id="member-email"
             className="input"
             type="email"
+            autoComplete="email"
+            required
             value={form.email}
             onChange={(e) => setForm({ ...form, email: e.target.value })}
           />
         </div>
         <div>
-          <label className="text-xs font-medium text-ink-500 mb-1.5 block">Role</label>
-          <select className="input" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as UserRole })}>
+          <label htmlFor="member-role" className="text-xs font-medium text-ink-500 mb-1.5 block">Role <span className="text-danger">*</span></label>
+          <select id="member-role" className="input" required value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as UserRole })}>
             {ROLES.map((r) => (
               <option key={r.value} value={r.value}>
                 {r.label}
@@ -93,10 +113,10 @@ export function AddMemberModal({ open, onClose }: { open: boolean; onClose: () =
             ))}
           </select>
         </div>
-        <div className="grid grid-cols-2 gap-3.5">
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
           <div>
-            <label className="text-xs font-medium text-ink-500 mb-1.5 block">State (optional)</label>
-            <select className="input" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })}>
+            <label htmlFor="member-state" className="text-xs font-medium text-ink-500 mb-1.5 block">State <span className="text-danger">*</span></label>
+            <select id="member-state" className="input" required value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })}>
               <option value="">Select state</option>
               {INDIAN_STATES.map((s) => (
                 <option key={s} value={s}>
@@ -106,21 +126,26 @@ export function AddMemberModal({ open, onClose }: { open: boolean; onClose: () =
             </select>
           </div>
           <div>
-            <label className="text-xs font-medium text-ink-500 mb-1.5 block">City (optional)</label>
-            <input className="input" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
+            <label htmlFor="member-city" className="text-xs font-medium text-ink-500 mb-1.5 block">City <span className="text-danger">*</span></label>
+            <input id="member-city" className="input" autoComplete="address-level2" required value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
           </div>
         </div>
         <div>
-          <label className="text-xs font-medium text-ink-500 mb-1.5 block">Temporary password (optional)</label>
+          <label htmlFor="member-password" className="text-xs font-medium text-ink-500 mb-1.5 block">Temporary password <span className="text-danger">*</span></label>
           <input
+            id="member-password"
             className="input"
-            type="text"
-            placeholder="Defaults to changeme123"
+            type="password"
+            autoComplete="new-password"
+            required
+            minLength={6}
+            placeholder="Minimum 6 characters"
             value={form.password}
             onChange={(e) => setForm({ ...form, password: e.target.value })}
           />
         </div>
-      </div>
+        <p className="text-[11px] text-ink-500"><span className="text-danger">*</span> All fields are required.</p>
+      </form>
     </Modal>
   );
 }

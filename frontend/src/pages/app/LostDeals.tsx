@@ -96,39 +96,42 @@ export function LostDealsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="page-eyebrow mb-1">Workspace / Review queue</p>
-          <h1 className="text-2xl font-display font-semibold text-ink-900">Lost Deals</h1>
-          <p className="text-sm text-ink-500 mt-0.5">
+          <h1 className="page-title">Lost Deals</h1>
+          <p className="page-subtitle">
             {data ? `${data.total} lost ${data.total === 1 ? "deal" : "deals"}` : "Loading..."}
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          {isAdmin && (
+          {isAdmin && selectedIds.length > 0 && (
             <button
-              className="btn-secondary text-sm text-danger border-danger/20 hover:border-danger/40 hover:bg-danger/5"
-              disabled={!selectedIds.length || bulkDeleteMutation.isPending}
+              className="btn-danger text-sm"
+              disabled={bulkDeleteMutation.isPending}
               onClick={() => setShowBulkDelete(true)}
               title={selectedIds.length ? `Delete ${selectedIds.length} selected lost deals` : "Select lost deals to delete"}
             >
               <Trash2 size={16} /> Delete selected{selectedIds.length ? ` (${selectedIds.length})` : ""}
             </button>
           )}
-          <div className="rounded-xl border border-danger/15 bg-danger/5 px-3.5 py-2 text-xs text-danger flex items-center gap-2">
-            <ArchiveX size={15} /> Review every lost-deal reason with the reporting telecaller.
-          </div>
         </div>
       </div>
 
-      <div className="card p-4 flex flex-wrap items-center gap-2.5">
-        <div className="relative flex-1 min-w-[220px]">
+      <div className="flex items-start gap-2 rounded-[9px] border border-warning/20 bg-warning/5 px-3.5 py-3 text-xs text-ink-600">
+        <ArchiveX size={15} className="mt-0.5 shrink-0 text-warning" />
+        Review every lost-deal reason with the reporting telecaller before permanently removing the record.
+      </div>
+
+      <div className="filter-bar">
+        <div className="relative min-w-[220px] flex-1 basis-full sm:basis-auto">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-300" />
           <input
             className="input pl-8 py-2"
+            aria-label="Search lost deals"
             placeholder="Search lost deals by name, phone, city..."
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
         </div>
-        <select className="input py-2 w-auto" value={telecallerFilter} onChange={(event) => setTelecallerFilter(event.target.value)}>
+        <select aria-label="Filter lost deals by telecaller" className="input w-full py-2 sm:w-auto" value={telecallerFilter} onChange={(event) => setTelecallerFilter(event.target.value)}>
           <option value="">All Telecallers</option>
           {telecallers.map((telecaller) => (
             <option key={telecaller.id} value={telecaller.id}>
@@ -148,7 +151,48 @@ export function LostDealsPage() {
             message="Lost deals reported by telecallers will appear here with their reason and attribution."
           />
         ) : (
-          <div className={`overflow-x-auto scroll-shadow-x transition-opacity duration-200 ${isPlaceholderData ? "opacity-60" : ""}`}>
+          <div className={`transition-opacity duration-200 ${isPlaceholderData ? "opacity-60" : ""}`}>
+            <div className="divide-y divide-ink-100 md:hidden">
+              {data.items.map((deal) => (
+                <article key={deal.id} className="p-4">
+                  <div className="flex items-start gap-3">
+                    {isAdmin && (
+                      <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-primary" aria-label={`Select ${deal.name}`} checked={selectedIds.includes(deal.id)} onChange={() => toggleSelected(deal.id)} />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <h2 className="font-semibold text-ink-900">{deal.name}</h2>
+                          <p className="mt-0.5 flex items-center gap-1.5 text-xs text-ink-500"><Phone size={11} /> {deal.phone}{deal.city ? ` · ${deal.city}` : ""}</p>
+                        </div>
+                        <StatusBadge status="lost" />
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        {(deal.interested_categories?.length ? deal.interested_categories : [deal.category]).map((category) => <CategoryBadge key={category} category={category} />)}
+                        <SourceBadge source={deal.source} />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 rounded-lg border border-danger/10 bg-danger/5 p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-danger">Reason reported</p>
+                    <p className="mt-1 text-sm leading-relaxed text-ink-700">{deal.lost_reason ?? "No reason recorded"}</p>
+                  </div>
+                  <dl className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                    <div><dt className="text-ink-400">Reported by</dt><dd className="mt-0.5 font-medium text-ink-700">{deal.lost_by_name ?? "Unknown"}</dd></div>
+                    <div><dt className="text-ink-400">Manager</dt><dd className="mt-0.5 font-medium text-ink-700">{deal.assignee_name ?? "Unassigned"}</dd></div>
+                    <div><dt className="text-ink-400">Lost on</dt><dd className="mt-0.5 font-medium text-ink-700">{deal.lost_at ? formatDate(deal.lost_at) : "—"}</dd></div>
+                  </dl>
+                  {isAdmin && (
+                    <div className="mt-3 flex justify-end">
+                      <button className="btn-ghost min-h-10 text-danger" disabled={deleteMutation.isPending || bulkDeleteMutation.isPending} onClick={() => setDeleteTarget(deal)}>
+                        <Trash2 size={16} /> Delete
+                      </button>
+                    </div>
+                  )}
+                </article>
+              ))}
+            </div>
+            <div className="hidden overflow-x-auto scroll-shadow-x md:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-ink-500 text-xs uppercase tracking-wide">
@@ -247,6 +291,7 @@ export function LostDealsPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </div>

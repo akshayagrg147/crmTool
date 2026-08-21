@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.models.user import UserRole
 
@@ -9,11 +9,19 @@ from app.models.user import UserRole
 class TeamMemberCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     phone: str = Field(min_length=6, max_length=20)
-    email: EmailStr | None = None
+    email: EmailStr
     role: UserRole
-    password: str | None = Field(default=None, min_length=6)
-    state: str | None = None
-    city: str | None = None
+    password: str = Field(min_length=6)
+    state: str = Field(min_length=1, max_length=100)
+    city: str = Field(min_length=1, max_length=100)
+
+    @field_validator("name", "phone", "state", "city")
+    @classmethod
+    def reject_blank_values(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("This field is required")
+        return value
 
 
 class TeamMemberUpdate(BaseModel):

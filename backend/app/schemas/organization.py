@@ -1,7 +1,10 @@
 import uuid
 from datetime import datetime
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+
+from app.models.user import UserRole
 
 
 class OrganizationCreate(BaseModel):
@@ -22,6 +25,39 @@ class OrganizationOut(BaseModel):
     created_at: datetime
     user_count: int = 0
     lead_count: int = 0
+
+
+class OrganizationMemberOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    phone: str
+    email: str | None
+    role: UserRole
+    is_active: bool
+    created_at: datetime
+
+
+class OrganizationDetailsOut(OrganizationOut):
+    members: list[OrganizationMemberOut] = Field(default_factory=list)
+
+
+class OrganizationUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    plan: Literal["trial", "starter", "professional", "enterprise"]
+    admin_name: str = Field(min_length=1, max_length=255)
+    admin_phone: str = Field(min_length=6, max_length=20)
+    admin_email: EmailStr | None = None
+    admin_password: str | None = Field(default=None, min_length=6, max_length=128)
+
+    @field_validator("name", "admin_name", "admin_phone")
+    @classmethod
+    def required_text_must_not_be_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("This field is required")
+        return value
 
 
 class PlatformStats(BaseModel):

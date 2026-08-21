@@ -18,11 +18,11 @@ const RANGE_OPTIONS: { value: "today" | "7d" | "all"; label: string }[] = [
 ];
 
 const OUTCOME_COLORS: Record<LeadStatus, string> = {
-  new: "#0D9488",
-  follow_up: "#D97706",
-  not_picked: "#94A3B8",
-  converted: "#059669",
-  lost: "#DC2626",
+  new: "#315D85",
+  follow_up: "#B8893A",
+  not_picked: "#9AA4AC",
+  converted: "#36785E",
+  lost: "#B64B45",
 };
 
 const OUTCOME_LABELS: Record<LeadStatus, string> = {
@@ -58,17 +58,17 @@ export function AnalyticsPage() {
 
   return (
     <div className={`flex flex-col gap-6 transition-opacity duration-200 ${isPlaceholderData ? "opacity-60" : ""}`}>
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-ink-100 pb-5">
         <div>
           <p className="page-eyebrow mb-1">Workspace / Reporting</p>
-          <h1 className="text-2xl font-display font-semibold text-ink-900">
+          <h1 className="page-title">
             {isTelecaller ? "My Calling Analytics" : "Calling Analytics"}
           </h1>
-          <p className="text-sm text-ink-500 mt-0.5">Call volume, talk time, and outcomes.</p>
+          <p className="page-subtitle">Call volume, talk time, outcomes, and commercial performance.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex w-full flex-wrap items-center gap-2.5 sm:w-auto">
           {!isTelecaller && (
-            <select className="input py-2 w-auto" value={memberFilter} onChange={(e) => setMemberFilter(e.target.value)}>
+            <select aria-label="Filter analytics by team member" className="input w-full py-2 sm:w-auto" value={memberFilter} onChange={(e) => setMemberFilter(e.target.value)}>
               <option value="">All Team Members</option>
               {telecallers.map((t) => (
                 <option key={t.id} value={t.id}>
@@ -77,13 +77,15 @@ export function AnalyticsPage() {
               ))}
             </select>
           )}
-          <div className="flex rounded-lg border border-ink-100 bg-ink-50 p-0.5">
+          <div className="flex w-full rounded-[10px] border border-ink-100 bg-white p-1 shadow-btn sm:w-auto" role="group" aria-label="Analytics date range">
             {RANGE_OPTIONS.map((opt) => (
               <button
+                type="button"
                 key={opt.value}
                 onClick={() => setRange(opt.value)}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  range === opt.value ? "bg-white shadow-sm text-ink-900" : "text-ink-500"
+                aria-pressed={range === opt.value}
+                className={`flex-1 rounded-md px-3.5 py-1.5 text-sm font-semibold transition-colors sm:flex-none ${
+                  range === opt.value ? "bg-primary-soft text-primary-dark" : "text-ink-500 hover:text-ink-900"
                 }`}
               >
                 {opt.label}
@@ -93,7 +95,7 @@ export function AnalyticsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <KpiCard label="Total Calls" value={String(data.total_calls)} icon={PhoneCall} color="orange" />
         <KpiCard label="Total Talk Time" value={formatMinutes(data.total_talk_time_minutes)} icon={Clock} color="indigo" />
         <KpiCard label="Avg Call Length" value={`${data.avg_call_length_minutes}m`} icon={Timer} color="teal" />
@@ -102,23 +104,37 @@ export function AnalyticsPage() {
         <KpiCard label="Avg Order Value" value={formatCurrency(data.avg_order_value)} icon={Wallet} color="indigo" />
       </div>
 
-      <div className="card p-5">
-        <div className="flex items-center justify-between mb-1">
-          <h2 className="panel-header font-display font-semibold text-ink-900">Call Volume by Hour</h2>
+      <div className="card p-5 sm:p-6">
+        <div className="mb-1 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="page-eyebrow mb-1">Daily cadence</p>
+            <h2 className="panel-header font-semibold text-ink-900">Call volume by hour</h2>
+            <p className="mt-1 text-xs text-ink-500">Identify the hours when your team is most active.</p>
+          </div>
           {peakHour && peakHour.calls > 0 && (
-            <span className="badge bg-primary/10 text-primary">Peak: {peakHour.hour}:00</span>
+            <span className="badge border border-accent/15 bg-accent-soft text-accent-dark">Peak hour · {peakHour.hour}:00</span>
           )}
         </div>
-        <div className="h-64 mt-4">
+        <div className="mt-5 h-64">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data.hourly_volume}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-              <XAxis dataKey="hour" tickFormatter={(h) => `${h}:00`} tick={{ fontSize: 10, fill: "#64748B" }} interval={0} />
-              <YAxis tick={{ fontSize: 11, fill: "#64748B" }} allowDecimals={false} />
+            <BarChart data={data.hourly_volume} margin={{ top: 8, right: 4, left: -18, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="2 5" vertical={false} stroke="#E1E3E2" />
+              <XAxis
+                dataKey="hour"
+                tickFormatter={(h) => `${h}:00`}
+                tick={{ fontSize: 10, fill: "#6A7782" }}
+                tickLine={false}
+                axisLine={false}
+                tickMargin={10}
+                interval="preserveStartEnd"
+                minTickGap={24}
+              />
+              <YAxis tick={{ fontSize: 11, fill: "#6A7782" }} tickLine={false} axisLine={false} allowDecimals={false} />
               <Tooltip
                 formatter={(value: number) => [`${value} calls`, ""]}
                 labelFormatter={(h) => `${h}:00`}
-                contentStyle={{ borderRadius: 12, border: "1px solid #E2E8F0" }}
+                cursor={{ fill: "rgba(23,58,94,.04)" }}
+                contentStyle={{ borderRadius: 8, border: "1px solid #E1E3E2", boxShadow: "0 14px 34px -22px rgba(24,37,51,.32)" }}
               />
               <Bar
                 dataKey="calls"
@@ -128,7 +144,7 @@ export function AnalyticsPage() {
                 animationEasing="ease-out"
               >
                 {data.hourly_volume.map((h) => (
-                  <Cell key={h.hour} fill={h.hour === peakHour?.hour && h.calls > 0 ? "#2563EB" : "#DBEAFE"} />
+                  <Cell key={h.hour} fill={h.hour === peakHour?.hour && h.calls > 0 ? "#B8893A" : "#B8C8D5"} />
                 ))}
               </Bar>
             </BarChart>
@@ -137,8 +153,11 @@ export function AnalyticsPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="card p-5">
-          <h2 className="panel-header font-display font-semibold text-ink-900 mb-4">Talk-Time Leaderboard</h2>
+        <div className="card p-5 sm:p-6">
+          <div className="mb-5">
+            <p className="page-eyebrow mb-1">Team standing</p>
+            <h2 className="panel-header font-semibold text-ink-900">Talk-time leaderboard</h2>
+          </div>
           {!data.leaderboard.length ? (
             <EmptyState icon={PhoneCall} title="No calls yet" />
           ) : (
@@ -146,11 +165,10 @@ export function AnalyticsPage() {
               {data.leaderboard.map((row, i) => (
                 <div
                   key={row.assignee_id}
-                  className="flex items-center gap-3 animate-fade-in-up"
-                  style={{ animationDelay: `${Math.min(i, 10) * 50}ms` }}
+                  className="flex items-center gap-3"
                 >
-                  <span className="text-sm font-semibold text-ink-300 w-4">{i + 1}</span>
-                  <div className="h-8 w-8 rounded-full bg-badge-indigo/10 text-badge-indigo flex items-center justify-center text-[11px] font-semibold shrink-0">
+                  <span className={`w-5 text-sm font-bold ${i < 3 ? "text-accent-dark" : "text-ink-300"}`}>{i + 1}</span>
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-primary/10 bg-primary-soft text-[11px] font-semibold text-primary-dark">
                     {initials(row.assignee_name)}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -174,27 +192,33 @@ export function AnalyticsPage() {
           )}
         </div>
 
-        <div className="card p-5">
-          <h2 className="panel-header font-display font-semibold text-ink-900 mb-4">Minutes per Team Member</h2>
+        <div className="card p-5 sm:p-6">
+          <div className="mb-5">
+            <p className="page-eyebrow mb-1">Activity allocation</p>
+            <h2 className="panel-header font-semibold text-ink-900">Minutes per team member</h2>
+          </div>
           {!data.minutes_per_member.length ? (
             <EmptyState icon={Clock} title="No calls yet" />
           ) : (
-            <div className="h-56">
+            <div style={{ height: Math.max(240, Math.min(data.minutes_per_member.length * 48, 520)) }}>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data.minutes_per_member} layout="vertical" margin={{ left: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E2E8F0" />
-                  <XAxis type="number" tick={{ fontSize: 11, fill: "#64748B" }} allowDecimals={false} />
+                <BarChart data={data.minutes_per_member} layout="vertical" margin={{ left: 8, right: 12 }}>
+                  <CartesianGrid strokeDasharray="2 5" horizontal={false} stroke="#E1E3E2" />
+                  <XAxis type="number" tick={{ fontSize: 11, fill: "#6A7782" }} tickLine={false} axisLine={false} allowDecimals={false} />
                   <YAxis
                     type="category"
                     dataKey="assignee_name"
                     width={90}
-                    tick={{ fontSize: 11, fill: "#64748B" }}
+                    tick={{ fontSize: 11, fill: "#6A7782" }}
+                    tickLine={false}
+                    axisLine={false}
                   />
                   <Tooltip
                     formatter={(value: number) => [`${value.toFixed(1)} min`, "Talk time"]}
-                    contentStyle={{ borderRadius: 12, border: "1px solid #E2E8F0" }}
+                    cursor={{ fill: "rgba(23,58,94,.04)" }}
+                    contentStyle={{ borderRadius: 8, border: "1px solid #E1E3E2", boxShadow: "0 14px 34px -22px rgba(24,37,51,.32)" }}
                   />
-                  <Bar dataKey="talk_time_minutes" fill="#0D9488" radius={[0, 6, 6, 0]} isAnimationActive animationDuration={900} animationEasing="ease-out" />
+                  <Bar dataKey="talk_time_minutes" fill="#2F6F6D" radius={[0, 5, 5, 0]} isAnimationActive animationDuration={900} animationEasing="ease-out" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -202,8 +226,11 @@ export function AnalyticsPage() {
         </div>
       </div>
 
-      <div className="card p-5">
-        <h2 className="panel-header font-display font-semibold text-ink-900 mb-4">Call Outcomes</h2>
+      <div className="card p-5 sm:p-6">
+        <div className="mb-4">
+          <p className="page-eyebrow mb-1">Disposition mix</p>
+          <h2 className="panel-header font-semibold text-ink-900">Call outcomes</h2>
+        </div>
         {!data.outcomes.length ? (
           <EmptyState icon={PhoneCall} title="No calls logged in this range" />
         ) : (
@@ -218,6 +245,8 @@ export function AnalyticsPage() {
                     innerRadius={55}
                     outerRadius={85}
                     paddingAngle={2}
+                    stroke="#FFFFFF"
+                    strokeWidth={2}
                     isAnimationActive
                     animationDuration={900}
                     animationEasing="ease-out"
@@ -228,7 +257,7 @@ export function AnalyticsPage() {
                   </Pie>
                   <Tooltip
                     formatter={(value: number, _name, entry: any) => [value, OUTCOME_LABELS[entry.payload.outcome as LeadStatus]]}
-                    contentStyle={{ borderRadius: 12, border: "1px solid #E2E8F0" }}
+                    contentStyle={{ borderRadius: 8, border: "1px solid #E1E3E2", boxShadow: "0 14px 34px -22px rgba(24,37,51,.32)" }}
                   />
                 </PieChart>
               </ResponsiveContainer>
@@ -251,12 +280,16 @@ export function AnalyticsPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-6">
-        <div className="card p-5">
-          <h2 className="panel-header font-display font-semibold text-ink-900 mb-4">City Performance</h2>
+        <div className="card p-5 sm:p-6">
+          <div className="mb-4">
+            <p className="page-eyebrow mb-1">Geographic view</p>
+            <h2 className="panel-header font-semibold text-ink-900">City performance</h2>
+          </div>
           {!data.city_breakdown.length ? (
             <EmptyState icon={MapPinned} title="No city data yet" message="Add a city to your leads to see performance here." />
           ) : (
-            <div className="overflow-x-auto scroll-shadow-x -mx-5">
+            <>
+            <div className="-mx-5 hidden overflow-x-auto scroll-shadow-x sm:block">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-ink-500 text-xs uppercase tracking-wide">
@@ -280,6 +313,21 @@ export function AnalyticsPage() {
                 </tbody>
               </table>
             </div>
+            <div className="divide-y divide-ink-100 sm:hidden">
+              {data.city_breakdown.map((c) => (
+                <article key={c.city} className="py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-semibold text-ink-900">{c.city}</p>
+                    <span className="text-sm font-bold text-primary" title={formatCurrencyFull(c.order_value)}>{formatCurrency(c.order_value)}</span>
+                  </div>
+                  <dl className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                    <div className="rounded-lg border border-ink-100 bg-[#F8F7F3] p-2.5"><dt className="text-ink-400">Leads</dt><dd className="mt-0.5 font-semibold text-ink-700">{c.leads_count}</dd></div>
+                    <div className="rounded-lg border border-ink-100 bg-[#F8F7F3] p-2.5"><dt className="text-ink-400">Converted</dt><dd className="mt-0.5 font-semibold text-success">{c.converted_count}</dd></div>
+                  </dl>
+                </article>
+              ))}
+            </div>
+            </>
           )}
         </div>
 

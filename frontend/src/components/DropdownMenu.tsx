@@ -79,7 +79,8 @@ export function DropdownMenu({ open, onClose, anchorEl, children, align = "end",
     <div
       ref={menuRef}
       style={style}
-      className="card p-1.5 z-[70] shadow-popover animate-scale-in max-h-80 overflow-y-auto"
+      role="menu"
+      className="card z-[70] max-h-80 overflow-y-auto p-1.5 shadow-popover animate-scale-in"
     >
       {children}
     </div>,

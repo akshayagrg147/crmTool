@@ -189,7 +189,7 @@ export function BulkImportModal({ open, onClose }: { open: boolean; onClose: () 
           <label className="text-xs font-medium text-ink-500 mb-1.5 block">CSV or XLSX file</label>
           <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-ink-100 rounded-xl py-8 cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition">
             <UploadCloud size={28} className="text-ink-300" />
-            <span className="text-sm text-ink-500">{file ? file.name : "Click to choose a file, or drag it here"}</span>
+            <span className="text-sm text-ink-500">{file ? file.name : "Click to choose a file"}</span>
             <span className="text-xs text-ink-300">Required: name, phone · Headers ignore case and spacing · Optional: city, category · Max 10 MB</span>
             <input
               ref={fileInputRef}
@@ -209,11 +209,11 @@ export function BulkImportModal({ open, onClose }: { open: boolean; onClose: () 
         )}
 
         {preview && (
-          <div className="rounded-xl border border-ink-100 overflow-hidden">
+          <div className="overflow-hidden rounded-[10px] border border-ink-100">
             <div className="bg-bg px-3.5 py-2 text-xs font-medium text-ink-500">
               Preview (first {preview.rows.length} rows) · {preview.count} data row{preview.count === 1 ? "" : "s"} detected
             </div>
-            <table className="w-full text-xs">
+            <div className="overflow-x-auto"><table className="min-w-full text-xs">
               <tbody>
                 {preview.rows.map((row, rowIndex) => (
                   <tr key={rowIndex} className="border-t border-ink-100">
@@ -225,7 +225,7 @@ export function BulkImportModal({ open, onClose }: { open: boolean; onClose: () 
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </div>
         )}
 

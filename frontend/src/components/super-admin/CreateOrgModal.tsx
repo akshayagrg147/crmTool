@@ -41,30 +41,36 @@ export function CreateOrgModal({ open, onClose }: { open: boolean; onClose: () =
     >
       <div className="flex flex-col gap-3.5">
         <div>
-          <label className="text-xs font-medium text-ink-500 mb-1.5 block">Organization name</label>
-          <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <label htmlFor="new-org-name" className="text-xs font-medium text-ink-500 mb-1.5 block">Organization name</label>
+          <input id="new-org-name" className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </div>
         <div className="h-px bg-ink-100" />
         <p className="text-xs font-semibold text-ink-700">First Admin</p>
         <div>
-          <label className="text-xs font-medium text-ink-500 mb-1.5 block">Name</label>
+          <label htmlFor="new-org-admin-name" className="text-xs font-medium text-ink-500 mb-1.5 block">Name</label>
           <input
+            id="new-org-admin-name"
             className="input"
             value={form.admin_name}
             onChange={(e) => setForm({ ...form, admin_name: e.target.value })}
           />
         </div>
         <div>
-          <label className="text-xs font-medium text-ink-500 mb-1.5 block">Phone</label>
+          <label htmlFor="new-org-admin-phone" className="text-xs font-medium text-ink-500 mb-1.5 block">Phone</label>
           <input
+            id="new-org-admin-phone"
             className="input"
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
             value={form.admin_phone}
             onChange={(e) => setForm({ ...form, admin_phone: e.target.value })}
           />
         </div>
         <div>
-          <label className="text-xs font-medium text-ink-500 mb-1.5 block">Email (optional)</label>
+          <label htmlFor="new-org-admin-email" className="text-xs font-medium text-ink-500 mb-1.5 block">Email (optional)</label>
           <input
+            id="new-org-admin-email"
             className="input"
             type="email"
             value={form.admin_email}
@@ -72,10 +78,12 @@ export function CreateOrgModal({ open, onClose }: { open: boolean; onClose: () =
           />
         </div>
         <div>
-          <label className="text-xs font-medium text-ink-500 mb-1.5 block">Password</label>
+          <label htmlFor="new-org-admin-password" className="text-xs font-medium text-ink-500 mb-1.5 block">Temporary password</label>
           <input
+            id="new-org-admin-password"
             className="input"
-            type="text"
+            type="password"
+            autoComplete="new-password"
             value={form.admin_password}
             onChange={(e) => setForm({ ...form, admin_password: e.target.value })}
             placeholder="Minimum 6 characters"

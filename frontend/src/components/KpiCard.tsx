@@ -13,10 +13,10 @@ interface KpiCardProps {
 }
 
 const colorClasses: Record<KpiCardProps["color"], string> = {
-  orange: "bg-badge-orange/10 text-badge-orange",
-  indigo: "bg-badge-indigo/10 text-badge-indigo",
-  teal: "bg-badge-teal/10 text-badge-teal",
-  pink: "bg-badge-pink/10 text-badge-pink",
+  orange: "bg-accent-soft text-accent-dark border-accent/15",
+  indigo: "bg-primary-soft text-primary border-primary/10",
+  teal: "bg-secondary/10 text-secondary border-secondary/10",
+  pink: "bg-[#F4ECEF] text-[#7B5067] border-[#7B5067]/10",
 };
 
 export function KpiCard({ label, value, delta, icon: Icon, color, to }: KpiCardProps) {
@@ -25,29 +25,30 @@ export function KpiCard({ label, value, delta, icon: Icon, color, to }: KpiCardP
 
   const content = (
     <>
-      <div className="flex items-start justify-between mb-4">
-        <p className="text-[13px] font-medium text-ink-500">{label}</p>
-        <div className={`h-9 w-9 rounded-xl flex items-center justify-center ring-1 ring-inset ring-black/[0.04] ${colorClasses[color]}`}>
+      <div className="mb-5 flex items-start justify-between gap-3">
+        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-ink-500">{label}</p>
+        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${colorClasses[color]}`}>
           <Icon size={16} />
         </div>
       </div>
-      <div className="flex items-end justify-between">
-        <p className="text-[30px] leading-none font-bold text-ink-900 tabular-nums tracking-[-0.04em]">
+      <div className="flex min-w-0 items-end justify-between gap-2">
+        <p className="min-w-0 break-words text-[28px] font-bold leading-none tracking-[-0.035em] text-ink-900 tabular-nums sm:text-[30px]">
           {animatedValue}
         </p>
         {to && (
           <ArrowRight
             size={16}
-            className="text-ink-300 mb-1.5 opacity-0 -translate-x-1 transition-all duration-200 ease-smooth group-hover:opacity-100 group-hover:translate-x-0"
+            className="mb-1.5 text-ink-300 transition-colors duration-150 group-hover:text-primary"
           />
         )}
       </div>
       {delta !== undefined && (
-        <div className="mt-2">
+        <div className="mt-3 flex items-center gap-2">
           <span className={`badge ${isPositive ? "bg-success/10 text-success" : "bg-danger/10 text-danger"}`}>
             {isPositive ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
             {Math.abs(delta).toFixed(1)}%
           </span>
+          <span className="text-[11px] text-ink-400">vs previous period</span>
         </div>
       )}
     </>
@@ -57,7 +58,7 @@ export function KpiCard({ label, value, delta, icon: Icon, color, to }: KpiCardP
     return (
       <Link
         to={to}
-        className="card-interactive p-5 group block focus-ring cursor-pointer"
+        className="card-interactive group block cursor-pointer p-5 focus-ring"
       >
         {content}
       </Link>

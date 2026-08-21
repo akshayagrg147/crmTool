@@ -3,40 +3,72 @@
 @tailwind utilities;
 
 @layer base {
-  html {
-    @apply antialiased scroll-smooth;
+  :root {
+    color-scheme: light;
+    font-synthesis: none;
   }
+
+  html {
+    @apply scroll-smooth antialiased;
+  }
+
   body {
-    @apply bg-bg text-ink-900 font-sans;
-    background-image: radial-gradient(circle at 15% -10%, rgba(37, 99, 235, 0.06), transparent 30rem),
-      radial-gradient(circle at 95% 0%, rgba(13, 148, 136, 0.04), transparent 26rem);
+    @apply bg-bg font-sans text-ink-900;
+    min-width: 320px;
+    background-image:
+      linear-gradient(rgba(23, 58, 94, 0.018) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(23, 58, 94, 0.018) 1px, transparent 1px),
+      radial-gradient(circle at 78% -12%, rgba(184, 137, 58, 0.08), transparent 28rem);
+    background-size: 36px 36px, 36px 36px, auto;
     background-attachment: fixed;
   }
-  h1, h2, h3, .font-display {
-    @apply font-sans font-semibold tracking-[-0.011em];
+
+  h1 {
+    font-family: "Source Serif 4", Georgia, serif;
+    letter-spacing: -0.018em;
   }
+
+  h2,
+  h3 {
+    letter-spacing: -0.012em;
+  }
+
   ::selection {
-    @apply bg-primary/15 text-ink-900;
+    @apply bg-accent/20 text-ink-900;
   }
+
   * {
-    scrollbar-color: #cbd5e1 transparent;
+    scrollbar-color: #b8bfc3 transparent;
     scrollbar-width: thin;
   }
-  button, a, input, select, textarea {
+
+  button,
+  a,
+  input,
+  select,
+  textarea {
     -webkit-tap-highlight-color: transparent;
   }
-  button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
-    outline: 3px solid rgba(37, 99, 235, 0.16);
+
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 3px solid rgba(23, 58, 94, 0.15);
     outline-offset: 2px;
   }
+
   *::-webkit-scrollbar {
     width: 8px;
     height: 8px;
   }
+
   *::-webkit-scrollbar-thumb {
-    background-color: #cbd5e1;
+    background-color: #b8bfc3;
     border-radius: 999px;
   }
+
   *::-webkit-scrollbar-track {
     background: transparent;
   }
@@ -44,66 +76,176 @@
 
 @layer components {
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-[10px] bg-primary px-3.5 py-2 text-sm font-semibold text-white shadow-btn transition-all duration-150 hover:bg-primary-dark hover:-translate-y-px hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:opacity-50 disabled:pointer-events-none;
+    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-[9px] border border-primary-dark bg-primary px-4 py-2 text-sm font-semibold text-white shadow-btn transition-all duration-150 hover:bg-primary-dark hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:pointer-events-none disabled:opacity-50;
   }
+
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-[10px] border border-ink-100 bg-surface px-3.5 py-2 text-sm font-semibold text-ink-700 shadow-btn transition-all duration-150 hover:border-ink-300 hover:bg-ink-50 hover:text-ink-900 hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:opacity-50 disabled:pointer-events-none;
+    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-[9px] border border-ink-100 bg-surface px-4 py-2 text-sm font-semibold text-ink-700 shadow-btn transition-all duration-150 hover:border-primary/25 hover:bg-primary-soft/60 hover:text-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:pointer-events-none disabled:opacity-50;
   }
+
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium text-ink-500 transition-colors duration-150 hover:bg-ink-50 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-50 disabled:pointer-events-none;
+    @apply inline-flex min-h-9 items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium text-ink-500 transition-colors duration-150 hover:bg-primary-soft/70 hover:text-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 disabled:pointer-events-none disabled:opacity-50;
   }
+
+  .btn-danger {
+    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-[9px] border border-danger bg-danger px-4 py-2 text-sm font-semibold text-white shadow-btn transition-all duration-150 hover:border-[#963A35] hover:bg-[#963A35] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/25 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50;
+  }
+
   .card {
-    @apply rounded-2xl border border-ink-100/90 bg-surface shadow-card;
+    @apply rounded-[10px] border border-ink-100/90 bg-surface shadow-card;
   }
+
   .card-interactive {
-    @apply card transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card-hover;
+    @apply card transition-all duration-200 hover:border-primary/15 hover:shadow-card-hover;
   }
+
   .panel-header {
-    @apply text-[15px] font-semibold text-ink-900;
+    @apply text-[17px] font-semibold text-ink-900;
   }
+
+  .input {
+    @apply min-h-10 w-full rounded-[9px] border border-ink-100 bg-white px-3 py-2 text-sm text-ink-900 shadow-[0_1px_1px_rgba(24,37,51,0.02)] outline-none transition-all duration-150 placeholder:text-ink-300 hover:border-ink-300 focus:border-primary/70 focus:ring-2 focus:ring-primary/10;
+  }
+
+  select.input {
+    @apply pr-8;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-transparent px-2 py-0.5 text-xs font-semibold transition-colors duration-150;
+  }
+
+  .skeleton {
+    @apply relative overflow-hidden rounded-lg bg-ink-100/70;
+    background-image: linear-gradient(
+      90deg,
+      rgba(225, 227, 226, 0.65) 25%,
+      rgba(245, 244, 240, 0.95) 37%,
+      rgba(225, 227, 226, 0.65) 63%
+    );
+    background-size: 400% 100%;
+    animation: shimmer 1.8s ease-in-out infinite;
+  }
+
+  .focus-ring {
+    @apply outline-none ring-0 focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-2 focus-visible:ring-offset-bg;
+  }
+
+  .page-eyebrow {
+    @apply text-[10px] font-bold uppercase tracking-[0.18em] text-accent-dark;
+  }
+
+  .page-title {
+    @apply text-[28px] font-semibold leading-tight text-ink-900 sm:text-[32px];
+    font-family: "Source Serif 4", Georgia, serif;
+  }
+
+  .page-subtitle {
+    @apply mt-1 text-sm leading-relaxed text-ink-500;
+  }
+
+  .filter-bar {
+    @apply card flex flex-wrap items-center gap-2.5 p-3.5 sm:p-4;
+  }
+
+  .section-label {
+    @apply text-[10px] font-bold uppercase tracking-[0.16em] text-ink-300;
+  }
+
   .scroll-shadow-x {
     background:
       linear-gradient(to right, #fff 30%, rgba(255, 255, 255, 0)),
       linear-gradient(to right, rgba(255, 255, 255, 0), #fff 70%) 100% 0,
-      linear-gradient(to right, rgba(15, 23, 42, 0.08), rgba(15, 23, 42, 0)),
-      linear-gradient(to left, rgba(15, 23, 42, 0.08), rgba(15, 23, 42, 0)) 100% 0;
-    background-repeat: no-repeat;
-    background-color: #fff;
-    background-size: 32px 100%, 32px 100%, 12px 100%, 12px 100%;
+      linear-gradient(to right, rgba(24, 37, 51, 0.08), rgba(24, 37, 51, 0)),
+      linear-gradient(to left, rgba(24, 37, 51, 0.08), rgba(24, 37, 51, 0)) 100% 0;
     background-attachment: local, local, scroll, scroll;
-  }
-  .input {
-    @apply w-full rounded-[10px] border border-ink-100 bg-surface px-3 py-2 text-sm text-ink-900 placeholder:text-ink-300 outline-none transition-all duration-150 hover:border-ink-300 focus:border-primary focus:ring-2 focus:ring-primary/15;
-  }
-  .badge {
-    @apply inline-flex items-center gap-1 whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-medium transition-colors duration-150;
-  }
-  .skeleton {
-    @apply relative overflow-hidden bg-ink-100/70 rounded-lg;
-    background-image: linear-gradient(90deg, rgba(226,232,240,0.6) 25%, rgba(241,245,249,0.9) 37%, rgba(226,232,240,0.6) 63%);
-    background-size: 400% 100%;
-    animation: shimmer 1.8s ease-in-out infinite;
-  }
-  .focus-ring {
-    @apply outline-none ring-0 focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 focus-visible:ring-offset-bg;
+    background-color: #fff;
+    background-repeat: no-repeat;
+    background-size: 32px 100%, 32px 100%, 12px 100%, 12px 100%;
   }
 
-  /* Data-dense CRM tables: quiet headers and clear row rhythm. */
   table thead tr {
-    @apply bg-ink-50/55;
+    @apply bg-[#F8F7F3];
   }
+
   table thead th {
-    @apply whitespace-nowrap;
+    @apply whitespace-nowrap border-b border-ink-100 text-[10px] font-bold uppercase tracking-[0.11em] text-ink-500;
   }
+
   table tbody tr {
     @apply transition-colors duration-150;
   }
-  .page-eyebrow {
-    @apply text-[10px] font-bold uppercase tracking-[0.16em] text-primary;
+
+  table tbody tr:hover {
+    @apply bg-[#FAFAF7];
   }
+
   .dashboard-hero {
     background:
-      radial-gradient(circle at 85% 15%, rgba(255,255,255,0.18), transparent 11rem),
-      linear-gradient(120deg, #1d4ed8 0%, #2563eb 54%, #0f766e 140%);
+      radial-gradient(circle at 88% 8%, rgba(201, 155, 74, 0.26), transparent 13rem),
+      radial-gradient(circle at 62% 130%, rgba(78, 122, 145, 0.24), transparent 17rem),
+      linear-gradient(125deg, #0e2942 0%, #173a5e 66%, #274f70 112%);
+  }
+
+  .heritage-panel {
+    background:
+      linear-gradient(rgba(255, 255, 255, 0.028) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.028) 1px, transparent 1px),
+      radial-gradient(circle at 15% 4%, rgba(201, 155, 74, 0.2), transparent 24rem),
+      linear-gradient(145deg, #0b2238 0%, #102f4b 56%, #173a5e 100%);
+    background-size: 48px 48px, 48px 48px, auto, auto;
+  }
+
+  .heritage-rule {
+    @apply h-px w-12 bg-accent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (min-width: 1024px) and (max-height: 800px) {
+  .login-brand-inner {
+    padding-top: 1.5rem;
+    padding-bottom: 1.5rem;
+  }
+
+  .login-brand-content {
+    padding-top: 1.25rem;
+    padding-bottom: 1.25rem;
+  }
+
+  .login-brand-heading {
+    max-width: 30rem;
+    font-size: 2.65rem;
+    line-height: 1.06;
+  }
+
+  .login-brand-copy {
+    margin-top: 0.75rem;
+    line-height: 1.45rem;
+  }
+
+  .login-capabilities {
+    margin-top: 1.25rem;
+    padding-top: 0.25rem;
+    padding-bottom: 0.25rem;
+  }
+
+  .login-capability {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+
+  .login-brand-footer {
+    padding-top: 0.75rem;
   }
 }

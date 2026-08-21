@@ -2,11 +2,11 @@ import { ShieldAlert, Pill, Leaf, Droplet, Sparkles, Package, HelpCircle } from 
 import type { LeadStatus, LeadSource, LeadCategory } from "@/api/types";
 
 const statusStyles: Record<LeadStatus, string> = {
-  new: "bg-secondary/10 text-secondary",
-  follow_up: "bg-warning/10 text-warning",
-  not_picked: "bg-ink-300/20 text-ink-500",
-  converted: "bg-success/10 text-success",
-  lost: "bg-danger/10 text-danger",
+  new: "border-secondary/10 bg-secondary/10 text-secondary",
+  follow_up: "border-warning/10 bg-warning/10 text-warning",
+  not_picked: "border-ink-100 bg-ink-50 text-ink-500",
+  converted: "border-success/10 bg-success/10 text-success",
+  lost: "border-danger/10 bg-danger/10 text-danger",
 };
 
 const statusLabels: Record<LeadStatus, string> = {
@@ -31,7 +31,7 @@ const sourceLabels: Record<LeadSource, string> = {
 };
 
 export function SourceBadge({ source }: { source: LeadSource }) {
-  return <span className="badge bg-badge-indigo/10 text-badge-indigo">{sourceLabels[source]}</span>;
+  return <span className="badge border-primary/10 bg-primary-soft text-primary">{sourceLabels[source]}</span>;
 }
 
 const categoryConfig: Record<string, { label: string; icon: typeof Pill; className: string }> = {

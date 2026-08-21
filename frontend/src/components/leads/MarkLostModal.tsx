@@ -59,7 +59,7 @@ export function MarkLostModal({
           <button className="btn-ghost" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn-primary" disabled={!canSubmit} onClick={() => mutation.mutate()}>
+          <button className="btn-danger" disabled={!canSubmit} onClick={() => mutation.mutate()}>
             {mutation.isPending ? "Sending..." : "Mark Lost & Send"}
           </button>
         </>
@@ -75,8 +75,9 @@ export function MarkLostModal({
         </div>
 
         <div>
-          <label className="text-xs font-medium text-ink-500 mb-1.5 block">Send to manager</label>
+          <label htmlFor="lost-manager" className="text-xs font-medium text-ink-500 mb-1.5 block">Send to manager <span className="text-danger">*</span></label>
           <select
+            id="lost-manager"
             className="input"
             value={managerId}
             onChange={(event) => setManagerId(event.target.value)}
@@ -95,8 +96,9 @@ export function MarkLostModal({
         </div>
 
         <div>
-          <label className="text-xs font-medium text-ink-500 mb-1.5 block">Why is this deal lost?</label>
+          <label htmlFor="lost-reason" className="text-xs font-medium text-ink-500 mb-1.5 block">Why is this deal lost? <span className="text-danger">*</span></label>
           <textarea
+            id="lost-reason"
             className="input min-h-[110px] resize-y"
             value={reason}
             onChange={(event) => setReason(event.target.value)}

@@ -6,8 +6,9 @@ from app.models.user import UserRole
 
 
 class LoginRequest(BaseModel):
-    phone: str
+    phone: str = Field(min_length=1, max_length=30)
     password: str
+    country_code: str | None = Field(default=None, max_length=8)
 
 
 class TokenPair(BaseModel):

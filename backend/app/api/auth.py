@@ -1,3 +1,5 @@
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,11 +23,44 @@ from app.schemas.auth import (
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+def _phone_candidates(phone: str, country_code: str | None) -> list[str]:
+    """Build compatible phone variants without changing existing user records.
+
+    TalkoCRM historically stores Indian numbers as bare ten-digit strings,
+    while newer users may enter an international/E.164 number. Keeping the
+    variants here lets the login country selector work with both formats.
+    """
+    raw = phone.strip()
+    candidates: list[str] = []
+
+    def add(value: str) -> None:
+        if value and value not in candidates:
+            candidates.append(value)
+
+    add(raw)
+    digits = re.sub(r"\D", "", raw)
+    add(digits)
+
+    dial_digits = re.sub(r"\D", "", country_code or "")
+    if dial_digits and digits:
+        local_digits = digits
+        if local_digits.startswith(dial_digits) and len(local_digits) > len(dial_digits):
+            local_digits = local_digits[len(dial_digits) :]
+        if local_digits.startswith("0") and len(local_digits) > 1:
+            local_digits = local_digits[1:]
+        add(f"+{dial_digits}{local_digits}")
+        add(f"{dial_digits}{local_digits}")
+
+    return candidates
+
+
 @router.post("/login", response_model=LoginResponse)
 @limiter.limit("10/minute")
 async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.phone == payload.phone))
-    user = result.scalar_one_or_none()
+    candidates = _phone_candidates(payload.phone, payload.country_code)
+    result = await db.execute(select(User).where(User.phone.in_(candidates)))
+    users_by_phone = {user.phone: user for user in result.scalars().all()}
+    user = next((users_by_phone[value] for value in candidates if value in users_by_phone), None)
     if user is None or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid phone number or password")
     if not user.is_active:

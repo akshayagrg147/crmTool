@@ -60,18 +60,22 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
           </div>
           <div className="flex flex-col gap-3">
             <div>
-              <label className="text-xs font-medium text-ink-500 mb-1.5 block">Current password</label>
+              <label htmlFor="settings-current-password" className="text-xs font-medium text-ink-500 mb-1.5 block">Current password</label>
               <input
+                id="settings-current-password"
                 type="password"
+                autoComplete="current-password"
                 className="input"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-ink-500 mb-1.5 block">New password</label>
+              <label htmlFor="settings-new-password" className="text-xs font-medium text-ink-500 mb-1.5 block">New password</label>
               <input
+                id="settings-new-password"
                 type="password"
+                autoComplete="new-password"
                 className="input"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
@@ -79,9 +83,11 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-ink-500 mb-1.5 block">Confirm new password</label>
+              <label htmlFor="settings-confirm-password" className="text-xs font-medium text-ink-500 mb-1.5 block">Confirm new password</label>
               <input
+                id="settings-confirm-password"
                 type="password"
+                autoComplete="new-password"
                 className="input"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
@@ -109,8 +115,8 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
             </div>
             <div className="flex flex-col gap-3">
               <div>
-                <label className="text-xs font-medium text-ink-500 mb-1.5 block">Organization name</label>
-                <input className="input" value={orgName} onChange={(e) => setOrgName(e.target.value)} />
+                <label htmlFor="settings-org-name" className="text-xs font-medium text-ink-500 mb-1.5 block">Organization name</label>
+                <input id="settings-org-name" className="input" value={orgName} onChange={(e) => setOrgName(e.target.value)} />
               </div>
               <button
                 className="btn-secondary self-start text-sm"

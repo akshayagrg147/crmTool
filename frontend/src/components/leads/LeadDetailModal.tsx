@@ -191,7 +191,7 @@ export function LeadDetailModal({
 
         {/* Labelled, so it's clear which chip means what */}
         <Section title="Classification">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <LabelledBadge label="Status">
               <StatusBadge status={lead.status} />
             </LabelledBadge>
@@ -237,7 +237,7 @@ export function LeadDetailModal({
             <div
               className={`rounded-lg border p-3.5 ${isOverCredit ? "border-warning/25 bg-warning/5" : "border-ink-100"}`}
             >
-              <div className="grid grid-cols-3 gap-3 text-sm">
+              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
                 <div>
                   <p className="text-xs text-ink-500">Credit limit</p>
                   <p className="font-semibold text-ink-900 tabular-nums mt-0.5">
@@ -441,8 +441,8 @@ function LabelledBadge({ label, children }: { label: string; children: ReactNode
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex items-start gap-3 px-3.5 py-2.5 text-sm">
-      <dt className="w-32 shrink-0 text-ink-500">{label}</dt>
+    <div className="flex flex-col gap-1 px-3.5 py-2.5 text-sm sm:flex-row sm:items-start sm:gap-3">
+      <dt className="shrink-0 text-xs text-ink-500 sm:w-32 sm:text-sm">{label}</dt>
       <dd className="text-ink-900 font-medium min-w-0 break-words">{children}</dd>
     </div>
   );
