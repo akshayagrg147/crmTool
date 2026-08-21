@@ -1,10 +1,11 @@
-import { type ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
   ArrowUpRight,
   BarChart3,
   Building2,
+  Calculator,
   CheckCircle2,
   ChevronDown,
   Headset,
@@ -12,13 +13,17 @@ import {
   KeyRound,
   Lock,
   MessagesSquare,
+  Minus,
   PhoneCall,
   Plug,
+  Plus,
   Route,
   ShieldCheck,
+  Sparkles,
   Tags,
   TrendingUp,
   UserRoundCog,
+  UsersRound,
   Workflow,
   Zap,
 } from "lucide-react";
@@ -114,6 +119,22 @@ const OPERATING_SIGNALS = [
     value: "Every conversation has context",
     detail: "Calls · follow-ups · outcomes",
   },
+];
+
+const MONTHLY_PRICE_PER_USER = 399;
+const INR = new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  maximumFractionDigits: 0,
+});
+
+const INCLUDED_FEATURES = [
+  "Lead distribution and ownership",
+  "Call logs, notes, and follow-ups",
+  "Admin, manager, and telecaller roles",
+  "Categories, lost deals, and analytics",
+  "CSV imports and connected lead sources",
+  "Organization-level data separation",
 ];
 
 /** Fades and lifts children in once they scroll into view; plays once. */
@@ -234,6 +255,131 @@ function PreviewPanel() {
   );
 }
 
+function PricingCalculator() {
+  const [users, setUsers] = useState(10);
+  const monthlyTotal = users * MONTHLY_PRICE_PER_USER;
+
+  function updateUsers(next: number) {
+    setUsers(Math.min(100, Math.max(1, next)));
+  }
+
+  return (
+    <div className="grid overflow-hidden rounded-[18px] border border-primary/10 bg-surface shadow-popover lg:grid-cols-[0.92fr_1.08fr]">
+      <div className="heritage-panel relative overflow-hidden p-6 text-white sm:p-9 lg:p-10">
+        <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-accent/15 blur-[90px]" aria-hidden="true" />
+        <div className="relative">
+          <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-accent-soft">
+            <Sparkles size={13} aria-hidden="true" /> One simple plan
+          </span>
+          <p className="mt-7 text-sm font-medium text-white/60">Per active CRM user</p>
+          <div className="mt-2 flex flex-wrap items-end gap-2">
+            <span className="font-serif text-5xl font-semibold tracking-[-0.04em] text-white sm:text-6xl">
+              {INR.format(MONTHLY_PRICE_PER_USER)}
+            </span>
+            <span className="pb-2 text-sm font-medium text-white/55">/ user / month</span>
+          </div>
+          <p className="mt-5 max-w-md text-sm leading-6 text-white/65">
+            Pay for the people who use TalkoCRM. Add admins, managers, or telecallers as your team grows.
+          </p>
+
+          <div className="mt-8 border-t border-white/10 pt-7">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-white/40">Number of users</p>
+                <p className="mt-1 text-sm font-semibold text-white">Choose your team size</p>
+              </div>
+              <div className="flex items-center rounded-[10px] border border-white/15 bg-white/[0.05] p-1">
+                <button
+                  type="button"
+                  className="flex h-9 w-9 items-center justify-center rounded-lg text-white/65 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30"
+                  aria-label="Remove one user"
+                  disabled={users === 1}
+                  onClick={() => updateUsers(users - 1)}
+                >
+                  <Minus size={16} aria-hidden="true" />
+                </button>
+                <input
+                  aria-label="Number of CRM users"
+                  className="w-14 border-0 bg-transparent text-center text-lg font-bold tabular-nums text-white outline-none"
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={users}
+                  onChange={(event) => updateUsers(Number(event.target.value) || 1)}
+                />
+                <button
+                  type="button"
+                  className="flex h-9 w-9 items-center justify-center rounded-lg text-white/65 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30"
+                  aria-label="Add one user"
+                  disabled={users === 100}
+                  onClick={() => updateUsers(users + 1)}
+                >
+                  <Plus size={16} aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+
+            <input
+              aria-label="Select team size"
+              className="mt-5 h-1.5 w-full cursor-pointer accent-[#B8893A]"
+              type="range"
+              min={1}
+              max={100}
+              value={users}
+              onChange={(event) => updateUsers(Number(event.target.value))}
+            />
+            <div className="mt-2 flex justify-between text-[10px] font-semibold uppercase tracking-wide text-white/35">
+              <span>1 user</span>
+              <span>100 users</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col p-6 sm:p-9 lg:p-10">
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-primary/10 bg-primary-soft text-primary">
+            <Calculator size={18} aria-hidden="true" />
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-accent-dark">Your estimate</p>
+            <h3 className="mt-1 text-lg font-semibold text-ink-900">A predictable monthly cost</h3>
+          </div>
+        </div>
+
+        <div className="mt-7 rounded-xl border border-ink-100 bg-[#F8F7F3] p-5" aria-live="polite">
+          <div className="flex items-center justify-between gap-4 text-sm">
+            <span className="flex items-center gap-2 text-ink-600"><UsersRound size={16} className="text-primary" aria-hidden="true" /> {users} active {users === 1 ? "user" : "users"}</span>
+            <span className="font-medium text-ink-600">{INR.format(MONTHLY_PRICE_PER_USER)} each</span>
+          </div>
+          <div className="mt-4 flex flex-wrap items-end justify-between gap-2 border-t border-ink-100 pt-4">
+            <span className="text-sm font-semibold text-ink-700">Estimated monthly total</span>
+            <span className="font-serif text-4xl font-semibold tracking-[-0.035em] text-primary-dark">{INR.format(monthlyTotal)}</span>
+          </div>
+        </div>
+
+        <p className="mt-7 text-[10px] font-bold uppercase tracking-[0.15em] text-ink-400">Everything your team needs</p>
+        <ul className="mt-4 grid gap-3 sm:grid-cols-2">
+          {INCLUDED_FEATURES.map((feature) => (
+            <li key={feature} className="flex items-start gap-2 text-sm leading-5 text-ink-700">
+              <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-secondary" aria-hidden="true" />
+              {feature}
+            </li>
+          ))}
+        </ul>
+
+        <div className="mt-auto pt-8">
+          <Link to="/login" className="btn-primary min-h-11 w-full text-[15px] sm:w-auto">
+            Log in to your workspace
+            <ArrowRight size={17} aria-hidden="true" />
+          </Link>
+          <p className="mt-3 text-xs leading-5 text-ink-500">Need more than 100 users? TalkoCRM can support a custom rollout for larger teams.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const featureColor: Record<"orange" | "indigo" | "teal" | "pink", string> = {
   orange: "bg-accent-soft text-accent-dark border-accent/15",
   indigo: "bg-primary-soft text-primary border-primary/10",
@@ -256,6 +402,9 @@ export function LandingPage() {
             </a>
             <a href="#workflow" className="transition-colors hover:text-primary-dark">
               How it works
+            </a>
+            <a href="#pricing" className="transition-colors hover:text-primary-dark">
+              Pricing
             </a>
           </nav>
           <Link to="/login" className="btn-primary">
@@ -436,6 +585,22 @@ export function LandingPage() {
         </div>
       </section>
 
+      <section id="pricing" className="relative overflow-hidden bg-bg px-5 py-20 sm:px-8 sm:py-24">
+        <div className="pointer-events-none absolute -right-32 top-10 h-80 w-80 rounded-full bg-accent/10 blur-[110px]" aria-hidden="true" />
+        <div className="relative mx-auto max-w-6xl">
+          <Reveal className="mx-auto max-w-2xl text-center">
+            <p className="page-eyebrow justify-center">Simple per-user pricing</p>
+            <h2 className="page-title mt-3">Only pay as your team grows.</h2>
+            <p className="mt-3 text-[15px] leading-7 text-ink-500">
+              One complete workspace, priced by the number of people who use it. Estimate your monthly cost instantly.
+            </p>
+          </Reveal>
+          <Reveal delay={100} className="mt-12">
+            <PricingCalculator />
+          </Reveal>
+        </div>
+      </section>
+
       <section className="heritage-panel relative overflow-hidden text-white">
         <div
           className="pointer-events-none absolute left-1/2 top-0 h-80 w-80 -translate-x-1/2 rounded-full bg-accent/15 blur-[110px] animate-float-slow"
@@ -471,6 +636,7 @@ export function LandingPage() {
                 <a href="#features" className="transition-colors hover:text-primary-dark">Features</a>
                 <a href="#workflow" className="transition-colors hover:text-primary-dark">How it works</a>
                 <a href="#roles" className="transition-colors hover:text-primary-dark">For your team</a>
+                <a href="#pricing" className="transition-colors hover:text-primary-dark">Pricing</a>
               </div>
             </div>
             <div>
