@@ -4,6 +4,7 @@ import { getAccessToken } from "@/api/client";
 import { AppShell } from "@/components/AppShell";
 import { PageLoading } from "@/components/Spinner";
 import { LoginPage } from "@/pages/Login";
+import { LandingPage } from "@/pages/Landing";
 import { DashboardPage } from "@/pages/app/Dashboard";
 import { LeadsPage } from "@/pages/app/Leads";
 import { FollowUpsPage } from "@/pages/app/FollowUps";
@@ -31,9 +32,13 @@ function ProtectedRoute({ children, roles }: { children: JSX.Element; roles?: st
   return children;
 }
 
-function RootRedirect() {
-  const { user } = useAuth();
-  return <Navigate to={homeForRole(user?.role)} replace />;
+function RootRoute() {
+  const { user, isLoading } = useAuth();
+  const hasToken = !!getAccessToken();
+
+  if (hasToken && isLoading) return <PageLoading />;
+  if (hasToken && user) return <Navigate to={homeForRole(user.role)} replace />;
+  return <LandingPage />;
 }
 
 function LoginRoute() {
@@ -98,8 +103,8 @@ export function App() {
         <Route path="/analytics" element={<AnalyticsPage />} />
       </Route>
 
-      <Route path="/" element={<RootRedirect />} />
-      <Route path="*" element={<RootRedirect />} />
+      <Route path="/" element={<RootRoute />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
