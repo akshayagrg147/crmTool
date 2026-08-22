@@ -1,7 +1,7 @@
 """End-to-end tests for external lead-source ingestion.
 
 Drives the real public webhook endpoint rather than calling the service directly,
-so routing, provider parsing, dedupe and round-robin assignment are all covered.
+so routing, provider parsing, dedupe and the default-unassigned policy are covered.
 """
 import secrets
 
@@ -44,7 +44,7 @@ async def _connect_justdial(db, org_id) -> str:
 
 
 @pytest.mark.asyncio
-async def test_webhook_imports_and_round_robins(client, db_session):
+async def test_webhook_imports_leads_without_automatic_assignment(client, db_session):
     org, _ = await create_org_with_admin(db_session, admin_phone="9200000001")
     tc1 = await _add_telecaller(db_session, org.id, "9200000010", "TC One")
     tc2 = await _add_telecaller(db_session, org.id, "9200000011", "TC Two")
@@ -70,11 +70,8 @@ async def test_webhook_imports_and_round_robins(client, db_session):
     assert all(l.source == LeadSource.justdial for l in leads)
     assert all(l.status.value == "new" for l in leads)
 
-    # Distributed evenly through the shared round-robin engine.
-    counts = {tc1.id: 0, tc2.id: 0}
-    for lead in leads:
-        counts[lead.assigned_to] += 1
-    assert counts[tc1.id] == 2 and counts[tc2.id] == 2
+    # Integrations never auto-distribute; an admin or manager must trigger it.
+    assert all(lead.assigned_to is None for lead in leads)
 
 
 @pytest.mark.asyncio

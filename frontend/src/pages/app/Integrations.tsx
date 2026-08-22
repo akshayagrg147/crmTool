@@ -89,7 +89,7 @@ export function IntegrationsPage() {
         <h1 className="page-title">Lead Sources</h1>
         <p className="page-subtitle max-w-3xl">
           Connect IndiaMART and JustDial so enquiries flow in automatically — no Excel upload needed.
-          New leads are auto-assigned to your telecallers in the same round-robin rotation.
+          New leads stay unassigned until an admin or manager explicitly distributes them.
         </p>
       </div>
 

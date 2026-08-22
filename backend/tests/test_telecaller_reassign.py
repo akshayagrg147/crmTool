@@ -118,7 +118,15 @@ async def test_assignment_history_records_creator_and_reassigner(client, db_sess
     )
     assert created.status_code == 201, created.text
     lead_id = created.json()["id"]
-    assert created.json()["assignee_name"] == telecaller.name
+    assert created.json()["assignee_name"] is None
+
+    distributed = await client.post(
+        "/api/leads/auto-assign-unassigned",
+        headers={"Authorization": f"Bearer {_token(admin)}"},
+    )
+    assert distributed.status_code == 200, distributed.text
+    assert distributed.json()["assigned_count"] == 1
+    assert distributed.json()["assignments"] == {telecaller.name: 1}
 
     reassigned = await client.post(
         f"/api/leads/{lead_id}/reassign",
@@ -133,8 +141,10 @@ async def test_assignment_history_records_creator_and_reassigner(client, db_sess
     )
     assert history.status_code == 200, history.text
     events = history.json()
-    assert [event["action"] for event in events] == ["reassigned", "created"]
+    assert [event["action"] for event in events] == ["reassigned", "auto_assigned", "created"]
     assert events[0]["previous_assignee_name"] == telecaller.name
     assert events[0]["new_assignee_name"] == manager.name
     assert events[0]["assigned_by_name"] == telecaller.name
     assert events[1]["assigned_by_name"] == admin.name
+    assert events[1]["new_assignee_name"] == telecaller.name
+    assert events[2]["assigned_by_name"] == admin.name

@@ -34,7 +34,7 @@ from app.schemas.lead import (
     ReassignRequest,
 )
 from app.schemas.lost_deal import MarkLostRequest
-from app.services.distribution import assign_batch, assign_next_telecaller
+from app.services.distribution import assign_batch
 from app.services.assignment_history import record_assignment
 
 router = APIRouter(prefix="/leads", tags=["leads"])
@@ -334,9 +334,6 @@ async def add_lead(
         outstanding_amount=payload.outstanding_amount,
         dnd=payload.dnd,
     )
-    assignee = await assign_next_telecaller(db, current.organization_id)
-    if assignee:
-        lead.assigned_to = assignee.id
     db.add(lead)
     await db.flush()
     record_assignment(
@@ -1107,10 +1104,9 @@ async def bulk_import_leads(
             issues_truncated=issue_count[0] > len(issues),
         )
 
-    assignees = await assign_batch(db, current.organization_id, len(valid_rows))
     assignments_count: dict[str, int] = {}
     new_leads = []
-    for row, assignee in zip(valid_rows, assignees):
+    for row in valid_rows:
         lead = Lead(
             organization_id=current.organization_id,
             name=row["name"],
@@ -1121,11 +1117,11 @@ async def bulk_import_leads(
             category=row["category"],
             custom_category=row["custom_category"],
             interested_categories=row["interested_categories"],
-            assigned_to=assignee.id if assignee else None,
+            # New imports stay unassigned until an admin or manager explicitly
+            # uses the bulk assignment or auto-distribution action.
+            assigned_to=None,
         )
         new_leads.append(lead)
-        if assignee:
-            assignments_count[assignee.name] = assignments_count.get(assignee.name, 0) + 1
 
     db.add_all(new_leads)
     await db.flush()

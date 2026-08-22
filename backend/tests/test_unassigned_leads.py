@@ -78,6 +78,40 @@ async def test_admin_and_manager_can_filter_and_assign_unassigned_leads(client, 
 
 
 @pytest.mark.asyncio
+async def test_manual_lead_creation_stays_unassigned_until_explicit_distribution(client, db_session):
+    org, admin = await create_org_with_admin(db_session, "Manual Lead QA", "9500000006")
+    telecaller = await _member(db_session, org.id, "Manual Telecaller", "9500000007", UserRole.telecaller)
+    await db_session.commit()
+
+    response = await client.post(
+        "/api/leads",
+        headers={"Authorization": f"Bearer {_token(admin)}"},
+        json={
+            "name": "Manual Lead",
+            "phone": "9500000008",
+            "source": "manual",
+            "category": "other",
+        },
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["assigned_to"] is None
+
+    created = (await db_session.execute(select(Lead).where(Lead.phone == "9500000008"))).scalar_one()
+    created_id = created.id
+    telecaller_id = telecaller.id
+    assert created.assigned_to is None
+
+    distributed = await client.post(
+        "/api/leads/auto-assign-unassigned",
+        headers={"Authorization": f"Bearer {_token(admin)}"},
+    )
+    assert distributed.status_code == 200, distributed.text
+    assert distributed.json()["assigned_count"] == 1
+    refreshed = (await db_session.execute(select(Lead.assigned_to).where(Lead.id == created_id))).scalar_one()
+    assert refreshed == telecaller_id
+
+
+@pytest.mark.asyncio
 async def test_manager_can_bulk_assign_selected_leads_and_telecaller_cannot(client, db_session):
     org, _admin = await create_org_with_admin(db_session, "Bulk Assignment QA", "9500000010")
     manager = await _member(db_session, org.id, "Bulk Manager", "9500000011", UserRole.manager)

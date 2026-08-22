@@ -1,8 +1,7 @@
-"""Turns normalized provider leads into assigned Lead rows.
+"""Turns normalized provider leads into unassigned Lead rows.
 
-Deliberately reuses `assign_batch`, the same round-robin engine used by manual
-creation and Excel bulk import, so the rotation pointer stays shared: leads
-arriving from IndiaMART continue the same rotation as ones typed in by hand.
+Incoming integration leads remain unassigned by default. An admin or manager
+can explicitly distribute them later from the Leads workspace.
 """
 from __future__ import annotations
 
@@ -15,7 +14,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.integration import IntegrationStatus, LeadIntegration
 from app.models.lead import Lead, LeadCategory, LeadStatus
-from app.services.distribution import assign_batch
 from app.services.assignment_history import record_assignment
 from app.services.integrations.base import NormalizedLead
 from app.services.integrations.registry import get_adapter
@@ -80,10 +78,8 @@ async def ingest_leads(
     if not fresh:
         return result
 
-    assignees = await assign_batch(db, org_id, len(fresh))
-
     new_rows = []
-    for lead, assignee in zip(fresh, assignees):
+    for lead in fresh:
         new_rows.append(
             Lead(
                 organization_id=org_id,
@@ -96,12 +92,10 @@ async def ingest_leads(
                 category=LeadCategory.other,
                 interested_categories=[LeadCategory.other.value],
                 notes=lead.to_notes(),
-                assigned_to=assignee.id if assignee else None,
+                assigned_to=None,
                 created_at=lead.received_at or datetime.now(timezone.utc),
             )
         )
-        if assignee:
-            result.assignments[assignee.name] = result.assignments.get(assignee.name, 0) + 1
 
     db.add_all(new_rows)
     await db.flush()

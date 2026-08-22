@@ -1,6 +1,8 @@
 import pytest
+from sqlalchemy import select
 
 from app.core.security import create_access_token
+from app.models.lead import Lead
 from tests.conftest import create_org_with_admin
 
 
@@ -28,9 +30,12 @@ async def test_bulk_import_reports_row_level_issues_and_imports_valid_rows(clien
     assert body["imported"] == 1
     assert body["skipped"] == 2
     assert body["issue_count"] == 2
+    assert body["assignments"] == {}
     assert {issue["code"] for issue in body["issues"]} == {"missing_name", "duplicate_in_file"}
     assert any(issue["row"] == 3 and issue["field"] == "name" for issue in body["issues"])
     assert any(issue["row"] == 4 and issue["field"] == "phone" for issue in body["issues"])
+    imported = (await db_session.execute(select(Lead).where(Lead.phone == "9111111111"))).scalar_one()
+    assert imported.assigned_to is None
 
 
 @pytest.mark.asyncio

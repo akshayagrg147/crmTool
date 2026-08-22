@@ -144,7 +144,7 @@ function SceneCapture() {
         className="animate-fade-in-up text-center text-[11px] font-semibold text-accent-soft"
         style={{ animationDelay: "1300ms" }}
       >
-        Auto-assigned to Tanish Telecaller — no upload needed
+        Ready for team assignment — no upload needed
       </p>
     </div>
   );
