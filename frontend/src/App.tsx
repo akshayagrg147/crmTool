@@ -5,7 +5,7 @@ import { AppShell } from "@/components/AppShell";
 import { PageLoading } from "@/components/Spinner";
 import { LoginPage } from "@/pages/Login";
 import { LandingPageV2 } from "@/pages/LandingV2";
-import { DashboardPage } from "@/pages/app/Dashboard";
+import { DashboardPageV2 } from "@/pages/app/DashboardV2";
 import { LeadsPage } from "@/pages/app/Leads";
 import { FollowUpsPage } from "@/pages/app/FollowUps";
 import { LostDealsPage } from "@/pages/app/LostDeals";
@@ -73,7 +73,7 @@ export function App() {
           </ProtectedRoute>
         }
       >
-        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/dashboard" element={<DashboardPageV2 />} />
         <Route path="/leads" element={<LeadsPage />} />
         <Route path="/follow-ups" element={<FollowUpsPage />} />
         <Route
