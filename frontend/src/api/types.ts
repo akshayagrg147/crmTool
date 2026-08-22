@@ -124,6 +124,15 @@ export interface LeadOut {
   dnd: boolean;
 }
 
+export interface BulkReassignResult {
+  updated_count: number;
+}
+
+export interface AutoAssignResult {
+  assigned_count: number;
+  assignments: Record<string, number>;
+}
+
 export interface AssignmentHistoryOut {
   id: string;
   previous_assignee_id: string | null;

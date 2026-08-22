@@ -141,6 +141,20 @@ class ReassignRequest(BaseModel):
     assigned_to: uuid.UUID | None
 
 
+class BulkReassignRequest(BaseModel):
+    lead_ids: list[uuid.UUID] = Field(min_length=1, max_length=500)
+    assigned_to: uuid.UUID
+
+
+class BulkReassignResult(BaseModel):
+    updated_count: int
+
+
+class AutoAssignResult(BaseModel):
+    assigned_count: int
+    assignments: dict[str, int]
+
+
 class LeadCategoryCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
 

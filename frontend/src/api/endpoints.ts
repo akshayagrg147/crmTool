@@ -14,6 +14,8 @@ import type {
   LeadSource,
   LeadStatus,
   BulkDeleteLostDealsResult,
+  BulkReassignResult,
+  AutoAssignResult,
   PaginatedLostDeals,
   MyOrganization,
   OrganizationOut,
@@ -125,6 +127,10 @@ export const leadsApi = {
   update: (id: string, payload: Partial<LeadOut>) => apiClient.patch<LeadOut>(`/leads/${id}`, payload).then((r) => r.data),
   reassign: (id: string, assigned_to: string | null) =>
     apiClient.post<LeadOut>(`/leads/${id}/reassign`, { assigned_to }).then((r) => r.data),
+  bulkReassign: (lead_ids: string[], assigned_to: string) =>
+    apiClient.post<BulkReassignResult>("/leads/bulk-reassign", { lead_ids, assigned_to }).then((r) => r.data),
+  autoAssignUnassigned: () =>
+    apiClient.post<AutoAssignResult>("/leads/auto-assign-unassigned").then((r) => r.data),
   markLost: (id: string, payload: { manager_id: string; reason: string }) =>
     apiClient.post<LeadOut>(`/leads/${id}/mark-lost`, payload).then((r) => r.data),
   bulkImport: (source: LeadSource, file: File) => {

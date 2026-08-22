@@ -2,7 +2,9 @@ import pytest
 
 from app.core.security import create_access_token, hash_password
 from app.models.lead import Lead, LeadCategory, LeadStatus
+from app.models.lead_assignment import LeadAssignmentHistory
 from app.models.user import User, UserRole
+from sqlalchemy import select
 from tests.conftest import create_org_with_admin
 
 
@@ -73,3 +75,76 @@ async def test_admin_and_manager_can_filter_and_assign_unassigned_leads(client, 
     )
     assert remaining.status_code == 200, remaining.text
     assert remaining.json()["total"] == 0
+
+
+@pytest.mark.asyncio
+async def test_manager_can_bulk_assign_selected_leads_and_telecaller_cannot(client, db_session):
+    org, _admin = await create_org_with_admin(db_session, "Bulk Assignment QA", "9500000010")
+    manager = await _member(db_session, org.id, "Bulk Manager", "9500000011", UserRole.manager)
+    telecaller = await _member(db_session, org.id, "Bulk Telecaller", "9500000012", UserRole.telecaller)
+    leads = [
+        Lead(
+            organization_id=org.id,
+            name=f"Bulk Lead {index}",
+            phone=f"950000001{index + 2}",
+            status=LeadStatus.new,
+            category=LeadCategory.other,
+        )
+        for index in range(2)
+    ]
+    db_session.add_all(leads)
+    await db_session.commit()
+
+    response = await client.post(
+        "/api/leads/bulk-reassign",
+        json={"lead_ids": [str(lead.id) for lead in leads], "assigned_to": str(telecaller.id)},
+        headers={"Authorization": f"Bearer {_token(manager)}"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json() == {"updated_count": 2}
+
+    blocked = await client.post(
+        "/api/leads/bulk-reassign",
+        json={"lead_ids": [str(leads[0].id)], "assigned_to": str(telecaller.id)},
+        headers={"Authorization": f"Bearer {_token(telecaller)}"},
+    )
+    assert blocked.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_admin_can_auto_distribute_all_unassigned_leads(client, db_session):
+    org, admin = await create_org_with_admin(db_session, "Automatic Distribution QA", "9500000020")
+    first = await _member(db_session, org.id, "Auto Telecaller A", "9500000021", UserRole.telecaller)
+    second = await _member(db_session, org.id, "Auto Telecaller B", "9500000022", UserRole.telecaller)
+    leads = [
+        Lead(
+            organization_id=org.id,
+            name=f"Auto Lead {index}",
+            phone=f"950000002{index + 3}",
+            status=LeadStatus.new,
+            category=LeadCategory.other,
+        )
+        for index in range(3)
+    ]
+    db_session.add_all(leads)
+    await db_session.commit()
+
+    response = await client.post(
+        "/api/leads/auto-assign-unassigned",
+        headers={"Authorization": f"Bearer {_token(admin)}"},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["assigned_count"] == 3
+    assert set(body["assignments"]) == {first.name, second.name}
+    assert sorted(body["assignments"].values()) == [1, 2]
+
+    refreshed = await db_session.execute(select(Lead).where(Lead.id.in_([lead.id for lead in leads])))
+    assert all(lead.assigned_to in {first.id, second.id} for lead in refreshed.scalars().all())
+    history = await db_session.execute(
+        select(LeadAssignmentHistory).where(
+            LeadAssignmentHistory.organization_id == org.id,
+            LeadAssignmentHistory.source == "automatic",
+        )
+    )
+    assert len(history.scalars().all()) == 3

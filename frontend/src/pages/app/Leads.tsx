@@ -20,6 +20,7 @@ import {
   UserRoundX,
   ArchiveX,
   Tags,
+  Shuffle,
 } from "lucide-react";
 import { leadsApi, usersApi } from "@/api/endpoints";
 import { useAuth } from "@/hooks/useAuth";
@@ -57,11 +58,14 @@ export function LeadsPage() {
   const [cityFilter, setCityFilter] = useState<string>("");
   const [callbackFilter, setCallbackFilter] = useState<"" | "scheduled" | "overdue">("");
   const [page, setPage] = useState(1);
+  const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
+  const [bulkAssigneeId, setBulkAssigneeId] = useState("");
 
   const [showAdd, setShowAdd] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
   const [showCategories, setShowCategories] = useState(false);
   const [showClearAll, setShowClearAll] = useState(false);
+  const [showAutoDistribute, setShowAutoDistribute] = useState(false);
   const [callModalLead, setCallModalLead] = useState<LeadOut | null>(null);
   const [callModalOutcome, setCallModalOutcome] = useState<LeadStatus | undefined>();
   const [detailLead, setDetailLead] = useState<LeadOut | null>(null);
@@ -75,6 +79,8 @@ export function LeadsPage() {
 
   useEffect(() => {
     setPage(1);
+    setSelectedLeadIds([]);
+    setBulkAssigneeId("");
   }, [search, sourceFilter, statusFilter, assigneeFilter, categoryFilter, cityFilter, callbackFilter]);
 
   const filters = {
@@ -140,6 +146,58 @@ export function LeadsPage() {
   const canManage = user?.role === "admin" || user?.role === "manager";
   const canAdmin = user?.role === "admin";
   const totalPages = data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1;
+  const visibleUnassignedIds = useMemo(
+    () => data?.items.filter((lead) => !lead.assigned_to).map((lead) => lead.id) ?? [],
+    [data?.items]
+  );
+  const allVisibleUnassignedSelected =
+    visibleUnassignedIds.length > 0 && visibleUnassignedIds.every((id) => selectedLeadIds.includes(id));
+
+  function toggleLeadSelection(id: string) {
+    setSelectedLeadIds((current) =>
+      current.includes(id) ? current.filter((selectedId) => selectedId !== id) : [...current, id]
+    );
+  }
+
+  function toggleAllVisibleUnassigned() {
+    setSelectedLeadIds((current) => {
+      if (allVisibleUnassignedSelected) return current.filter((id) => !visibleUnassignedIds.includes(id));
+      return Array.from(new Set([...current, ...visibleUnassignedIds]));
+    });
+  }
+
+  const bulkAssignMutation = useMutation({
+    mutationFn: ({ leadIds, assigneeId }: { leadIds: string[]; assigneeId: string }) =>
+      leadsApi.bulkReassign(leadIds, assigneeId),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      toast(`${result.updated_count} lead${result.updated_count === 1 ? "" : "s"} assigned`, "success");
+      setSelectedLeadIds([]);
+      setBulkAssigneeId("");
+    },
+    onError: (error: any) =>
+      toast(error?.response?.data?.detail ?? "Couldn't assign the selected leads. Please try again.", "error"),
+  });
+
+  const autoAssignMutation = useMutation({
+    mutationFn: leadsApi.autoAssignUnassigned,
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      setShowAutoDistribute(false);
+      setSelectedLeadIds([]);
+      setBulkAssigneeId("");
+      toast(
+        result.assigned_count
+          ? `${result.assigned_count} unassigned lead${result.assigned_count === 1 ? "" : "s"} distributed`
+          : "There are no unassigned leads to distribute",
+        result.assigned_count ? "success" : "info"
+      );
+    },
+    onError: (error: any) =>
+      toast(error?.response?.data?.detail ?? "Couldn't distribute unassigned leads. Please try again.", "error"),
+  });
 
   async function handleExport() {
     setExporting(true);
@@ -188,6 +246,9 @@ export function LeadsPage() {
               )}
               <button className="btn-secondary text-sm" onClick={() => setShowBulk(true)}>
                 <UploadCloud size={16} /> Bulk Import
+              </button>
+              <button className="btn-secondary text-sm" onClick={() => setShowAutoDistribute(true)}>
+                <Shuffle size={16} /> Auto-distribute
               </button>
               <button className="btn-primary text-sm" onClick={() => setShowAdd(true)}>
                 <Plus size={16} /> Add Lead
@@ -291,6 +352,45 @@ export function LeadsPage() {
         </select>
       </div>
 
+      {canManage && selectedLeadIds.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-primary/15 bg-primary-soft/50 px-4 py-3">
+          <div className="mr-auto">
+            <p className="text-sm font-semibold text-ink-900">{selectedLeadIds.length} unassigned lead{selectedLeadIds.length === 1 ? "" : "s"} selected</p>
+            <p className="text-xs text-ink-500">Choose an active telecaller to assign them together.</p>
+          </div>
+          <select
+            aria-label="Assign selected leads to telecaller"
+            className="input w-full py-2 sm:w-auto"
+            value={bulkAssigneeId}
+            onChange={(event) => setBulkAssigneeId(event.target.value)}
+          >
+            <option value="">Choose telecaller</option>
+            {telecallers.map((telecaller) => (
+              <option key={telecaller.id} value={telecaller.id}>
+                {telecaller.name}
+              </option>
+            ))}
+          </select>
+          <button
+            className="btn-primary text-sm"
+            disabled={!bulkAssigneeId || bulkAssignMutation.isPending}
+            onClick={() => bulkAssignMutation.mutate({ leadIds: selectedLeadIds, assigneeId: bulkAssigneeId })}
+          >
+            {bulkAssignMutation.isPending ? "Assigning..." : "Assign selected"}
+          </button>
+          <button
+            className="btn-ghost text-sm"
+            disabled={bulkAssignMutation.isPending}
+            onClick={() => {
+              setSelectedLeadIds([]);
+              setBulkAssigneeId("");
+            }}
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
+
       <div className="card">
         {isLoading ? (
           <TableSkeleton rows={8} cols={4} />
@@ -311,8 +411,18 @@ export function LeadsPage() {
           <div className={`transition-opacity duration-200 ${isPlaceholderData ? "opacity-60" : ""}`}>
             <div className="divide-y divide-ink-100 md:hidden">
               {data.items.map((lead) => (
-                <article key={lead.id} className="p-4">
-                  <button type="button" className="flex w-full items-start gap-3 text-left" onClick={() => setDetailLead(lead)}>
+                <article key={lead.id} className={`p-4 ${selectedLeadIds.includes(lead.id) ? "bg-primary-soft/30" : ""}`}>
+                  <div className="flex items-start gap-3">
+                    {canManage && !lead.assigned_to && (
+                      <input
+                        type="checkbox"
+                        className="mt-2 h-4 w-4 shrink-0 accent-primary"
+                        aria-label={`Select ${lead.name}`}
+                        checked={selectedLeadIds.includes(lead.id)}
+                        onChange={() => toggleLeadSelection(lead.id)}
+                      />
+                    )}
+                    <button type="button" className="flex min-w-0 flex-1 items-start gap-3 text-left" onClick={() => setDetailLead(lead)}>
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-xs font-bold text-primary">
                       {initials(lead.name)}
                     </div>
@@ -328,7 +438,8 @@ export function LeadsPage() {
                         <SourceBadge source={lead.source} />
                       </div>
                     </div>
-                  </button>
+                    </button>
+                  </div>
                   <dl className="mt-3 grid grid-cols-2 gap-2 rounded-lg border border-ink-100 bg-[#F8F7F3] p-3 text-xs">
                     {!isTelecaller && <div><dt className="text-ink-400">Assigned to</dt><dd className="mt-0.5 font-medium text-ink-700">{lead.assignee_name ?? "Unassigned"}</dd></div>}
                     <div><dt className="text-ink-400">Added</dt><dd className="mt-0.5 font-medium text-ink-700">{formatDate(lead.created_at)}</dd></div>
@@ -353,6 +464,18 @@ export function LeadsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-ink-500 text-xs uppercase tracking-wide">
+                  {canManage && (
+                    <th className="font-medium px-5 py-3">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-primary"
+                        aria-label="Select all unassigned leads on this page"
+                        checked={allVisibleUnassignedSelected}
+                        disabled={!visibleUnassignedIds.length}
+                        onChange={toggleAllVisibleUnassigned}
+                      />
+                    </th>
+                  )}
                   <th className="font-medium px-5 py-3">S.No.</th>
                   <th className="font-medium px-5 py-3">Lead Added</th>
                   <th className="font-medium px-5 py-3">Lead</th>
@@ -368,8 +491,22 @@ export function LeadsPage() {
                 {data.items.map((lead, i) => (
                   <tr
                     key={lead.id}
-                    className="border-t border-ink-100 transition-colors duration-150 hover:bg-bg/60"
+                    className={`border-t border-ink-100 transition-colors duration-150 hover:bg-bg/60 ${selectedLeadIds.includes(lead.id) ? "bg-primary-soft/30" : ""}`}
                   >
+                    {canManage && (
+                      <td className="px-5 py-3">
+                        {lead.assigned_to ? null : (
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 accent-primary"
+                            aria-label={`Select ${lead.name}`}
+                            checked={selectedLeadIds.includes(lead.id)}
+                            onChange={() => toggleLeadSelection(lead.id)}
+                            onClick={(event) => event.stopPropagation()}
+                          />
+                        )}
+                      </td>
+                    )}
                     <td className="px-5 py-3 text-ink-500 tabular-nums">{(page - 1) * PAGE_SIZE + i + 1}</td>
                     <td className="px-5 py-3 text-ink-700 text-xs whitespace-nowrap">{formatDate(lead.created_at)}</td>
                     <td className="px-5 py-3 cursor-pointer" onClick={() => setDetailLead(lead)}>
@@ -582,6 +719,15 @@ export function LeadsPage() {
         message={`This permanently deletes ${deleteTarget?.name} and their full call history. This cannot be undone.`}
         confirmLabel="Delete Lead"
         isLoading={deleteMutation.isPending}
+      />
+      <ConfirmModal
+        open={showAutoDistribute}
+        onClose={() => setShowAutoDistribute(false)}
+        onConfirm={() => autoAssignMutation.mutate()}
+        title="Auto-distribute unassigned leads?"
+        message="Every unassigned lead will be assigned across active telecallers in round-robin order. Existing assignments will not change, and each new assignment will be recorded in history."
+        confirmLabel="Distribute Leads"
+        isLoading={autoAssignMutation.isPending}
       />
     </div>
   );

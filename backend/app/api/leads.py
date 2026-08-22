@@ -19,7 +19,10 @@ from app.models.lead_assignment import LeadAssignmentHistory
 from app.models.user import User, UserRole
 from app.schemas.lead import (
     AssignmentHistoryOut,
+    AutoAssignResult,
     BulkImportResult,
+    BulkReassignRequest,
+    BulkReassignResult,
     DuplicateLeadMatch,
     LeadCategoryCreate,
     LeadCategoryOptionOut,
@@ -613,6 +616,102 @@ async def reassign_lead(
     result = await db.execute(select(Lead).options(*LEAD_LOAD_OPTIONS).where(Lead.id == lead.id))
     lead = result.scalar_one()
     return _to_out(lead)
+
+
+@router.post("/bulk-reassign", response_model=BulkReassignResult)
+async def bulk_reassign_leads(
+    payload: BulkReassignRequest,
+    current: CurrentUser = Depends(require_admin_or_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """Assign a selected batch of leads to one active telecaller."""
+    target_result = await db.execute(
+        select(User).where(
+            User.id == payload.assigned_to,
+            User.organization_id == current.organization_id,
+            User.role == UserRole.telecaller,
+            User.is_active.is_(True),
+        )
+    )
+    if target_result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Choose an active telecaller in your organization",
+        )
+
+    result = await db.execute(
+        select(Lead).where(
+            Lead.organization_id == current.organization_id,
+            Lead.id.in_(payload.lead_ids),
+        )
+    )
+    leads = list(result.scalars().all())
+    if len(leads) != len(set(payload.lead_ids)):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "One or more selected leads were not found")
+
+    updated_count = 0
+    for lead in leads:
+        if lead.assigned_to == payload.assigned_to:
+            continue
+        previous_assignee_id = lead.assigned_to
+        lead.assigned_to = payload.assigned_to
+        record_assignment(
+            db,
+            organization_id=current.organization_id,
+            lead_id=lead.id,
+            previous_assignee_id=previous_assignee_id,
+            new_assignee_id=lead.assigned_to,
+            assigned_by_id=current.id,
+            action="reassigned",
+            source="bulk",
+        )
+        updated_count += 1
+
+    await db.commit()
+    return BulkReassignResult(updated_count=updated_count)
+
+
+@router.post("/auto-assign-unassigned", response_model=AutoAssignResult)
+async def auto_assign_unassigned_leads(
+    current: CurrentUser = Depends(require_admin_or_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """Distribute all unassigned leads across active telecallers round-robin."""
+    result = await db.execute(
+        select(Lead)
+        .where(
+            Lead.organization_id == current.organization_id,
+            Lead.assigned_to.is_(None),
+        )
+        .order_by(Lead.created_at.asc(), Lead.id.asc())
+        .with_for_update()
+    )
+    leads = list(result.scalars().all())
+    if not leads:
+        return AutoAssignResult(assigned_count=0, assignments={})
+
+    assignees = await assign_batch(db, current.organization_id, len(leads))
+    if not assignees or any(assignee is None for assignee in assignees):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Add an active telecaller before distributing leads")
+
+    assignment_counts: dict[str, int] = {}
+    for lead, assignee in zip(leads, assignees):
+        assert assignee is not None
+        lead.assigned_to = assignee.id
+        assignment_counts[assignee.name] = assignment_counts.get(assignee.name, 0) + 1
+        record_assignment(
+            db,
+            organization_id=current.organization_id,
+            lead_id=lead.id,
+            previous_assignee_id=None,
+            new_assignee_id=assignee.id,
+            assigned_by_id=current.id,
+            action="auto_assigned",
+            source="automatic",
+        )
+
+    await db.commit()
+    return AutoAssignResult(assigned_count=len(leads), assignments=assignment_counts)
 
 
 @router.post("/{lead_id}/mark-lost", response_model=LeadOut)
