@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,7 +9,7 @@ from app.core.deps import CurrentUser, require_admin, require_admin_or_manager, 
 from app.core.security import hash_password
 from app.models.lead import Lead
 from app.models.user import User, UserRole
-from app.schemas.user import TeamMemberCreate, TeamMemberOut, TeamMemberUpdate
+from app.schemas.user import AdminResetPasswordRequest, TeamMemberCreate, TeamMemberOut, TeamMemberUpdate
 from app.services.assignment_history import record_assignment
 
 router = APIRouter(prefix="/users", tags=["team"])
@@ -21,6 +21,13 @@ async def _active_leads_count(db: AsyncSession, user_id: uuid.UUID) -> int:
             Lead.assigned_to == user_id,
             Lead.status.notin_(["converted", "lost"]),
         )
+    )
+    return result.scalar_one()
+
+
+async def _assigned_leads_count(db: AsyncSession, user_id: uuid.UUID) -> int:
+    result = await db.execute(
+        select(func.count()).select_from(Lead).where(Lead.assigned_to == user_id)
     )
     return result.scalar_one()
 
@@ -42,6 +49,7 @@ async def list_team(current: CurrentUser = Depends(require_org_user), db: AsyncS
         count = await _active_leads_count(db, m.id)
         item = _to_out(m)
         item.active_leads_count = count
+        item.assigned_leads_count = await _assigned_leads_count(db, m.id)
         out.append(item)
     return out
 
@@ -63,6 +71,7 @@ async def list_active_managers(current: CurrentUser = Depends(require_org_user),
     for manager in managers:
         item = _to_out(manager)
         item.active_leads_count = await _active_leads_count(db, manager.id)
+        item.assigned_leads_count = await _assigned_leads_count(db, manager.id)
         out.append(item)
     return out
 
@@ -96,6 +105,7 @@ async def add_team_member(
     member = result.scalar_one()
     out = _to_out(member)
     out.active_leads_count = 0
+    out.assigned_leads_count = 0
     return out
 
 
@@ -149,7 +159,29 @@ async def update_team_member(
     member = result.scalar_one()
     out = _to_out(member)
     out.active_leads_count = await _active_leads_count(db, member.id)
+    out.assigned_leads_count = await _assigned_leads_count(db, member.id)
     return out
+
+
+@router.post("/{user_id}/reset-password", status_code=status.HTTP_204_NO_CONTENT)
+async def reset_telecaller_password(
+    user_id: uuid.UUID,
+    payload: AdminResetPasswordRequest,
+    current: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Allow an organization admin to set a telecaller's temporary password."""
+    result = await db.execute(
+        select(User).where(User.id == user_id, User.organization_id == current.organization_id)
+    )
+    member = result.scalar_one_or_none()
+    if member is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Team member not found")
+    if member.role != UserRole.telecaller:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Admins can reset passwords only for telecallers")
+
+    member.password_hash = hash_password(payload.new_password)
+    await db.commit()
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -157,6 +189,7 @@ async def remove_team_member(
     user_id: uuid.UUID,
     current: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
+    manager_id: uuid.UUID | None = Query(default=None),
 ):
     result = await db.execute(
         select(User).where(User.id == user_id, User.organization_id == current.organization_id)
@@ -186,22 +219,47 @@ async def remove_team_member(
             Lead.organization_id == current.organization_id,
         )
     )
-    for (lead_id,) in assigned_leads_result.all():
+    assigned_lead_ids = [lead_id for (lead_id,) in assigned_leads_result.all()]
+
+    replacement_manager = None
+    if assigned_lead_ids:
+        if manager_id is None:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Select an active manager before removing a member with assigned leads",
+            )
+        manager_result = await db.execute(
+            select(User).where(
+                User.id == manager_id,
+                User.organization_id == current.organization_id,
+                User.role == UserRole.manager,
+                User.is_active.is_(True),
+                User.id != member.id,
+            )
+        )
+        replacement_manager = manager_result.scalar_one_or_none()
+        if replacement_manager is None:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Choose another active manager in this organization to receive the assigned leads",
+            )
+
+    for lead_id in assigned_lead_ids:
         record_assignment(
             db,
             organization_id=current.organization_id,
             lead_id=lead_id,
             previous_assignee_id=member.id,
-            new_assignee_id=None,
+            new_assignee_id=replacement_manager.id if replacement_manager else None,
             assigned_by_id=current.id,
-            action="unassigned",
+            action="reassigned" if replacement_manager else "unassigned",
             source="team_member_removed",
         )
 
     await db.execute(
         update(Lead)
         .where(Lead.assigned_to == member.id, Lead.organization_id == current.organization_id)
-        .values(assigned_to=None)
+        .values(assigned_to=replacement_manager.id if replacement_manager else None)
     )
     await db.delete(member)
     await db.commit()

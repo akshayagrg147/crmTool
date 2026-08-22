@@ -78,7 +78,10 @@ export const usersApi = {
       city: string | null;
     }>
   ) => apiClient.patch<TeamMemberOut>(`/users/${id}`, payload).then((r) => r.data),
-  remove: (id: string) => apiClient.delete(`/users/${id}`).then((r) => r.data),
+  remove: (id: string, managerId?: string) =>
+    apiClient.delete(`/users/${id}`, { params: managerId ? { manager_id: managerId } : undefined }).then((r) => r.data),
+  resetPassword: (id: string, newPassword: string) =>
+    apiClient.post(`/users/${id}/reset-password`, { new_password: newPassword }).then((r) => r.data),
 };
 
 export interface LeadFilters {

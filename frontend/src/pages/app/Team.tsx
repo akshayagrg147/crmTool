@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2, Users2 } from "lucide-react";
+import { KeyRound, Plus, Trash2, Users2 } from "lucide-react";
 import { usersApi } from "@/api/endpoints";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/useToast";
@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { TableSkeleton } from "@/components/Spinner";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { AddMemberModal } from "@/components/team/AddMemberModal";
+import { ResetPasswordModal } from "@/components/team/ResetPasswordModal";
 import { initials, formatDate } from "@/lib/format";
 import type { TeamMemberOut, UserRole } from "@/api/types";
 
@@ -33,8 +34,17 @@ export function TeamPage() {
 
   const [showAdd, setShowAdd] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<TeamMemberOut | null>(null);
+  const [removeManagerId, setRemoveManagerId] = useState("");
+  const [passwordTarget, setPasswordTarget] = useState<TeamMemberOut | null>(null);
 
   const { data: team, isLoading } = useQuery({ queryKey: ["team"], queryFn: usersApi.list });
+  const activeManagers = team?.filter((member) => member.role === "manager" && member.is_active) ?? [];
+
+  function openRemoveModal(member: TeamMemberOut) {
+    const defaultManager = activeManagers.find((manager) => manager.id !== member.id);
+    setRemoveManagerId(defaultManager?.id ?? "");
+    setRemoveTarget(member);
+  }
 
   const toggleMutation = useMutation({
     mutationFn: ({ id, is_active }: { id: string; is_active: boolean }) => usersApi.update(id, { is_active }),
@@ -54,15 +64,25 @@ export function TeamPage() {
   });
 
   const removeMutation = useMutation({
-    mutationFn: (id: string) => usersApi.remove(id),
-    onSuccess: () => {
+    mutationFn: ({ id, managerId }: { id: string; managerId?: string }) => usersApi.remove(id, managerId),
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["team"] });
       queryClient.invalidateQueries({ queryKey: ["leads"] });
-      toast("Team member removed. Their open leads moved to Unassigned.", "success");
+      const managerName = activeManagers.find((manager) => manager.id === variables.managerId)?.name;
+      toast(
+        variables.managerId
+          ? `Team member removed. Their assigned leads moved to ${managerName ?? "the selected manager"}.`
+          : "Team member removed. Their call history was kept.",
+        "success",
+      );
       setRemoveTarget(null);
+      setRemoveManagerId("");
     },
     onError: (err: any) => toast(err?.response?.data?.detail ?? "Couldn't remove team member.", "error"),
   });
+
+  const needsLeadTransfer = Boolean(removeTarget?.assigned_leads_count);
+  const selectableManagers = activeManagers.filter((manager) => manager.id !== removeTarget?.id);
 
   return (
     <div className="flex flex-col gap-5">
@@ -149,13 +169,25 @@ export function TeamPage() {
                     </td>
                     {isAdmin && (
                       <td className="px-5 py-3 text-right">
-                        <button
-                          className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-danger hover:bg-danger/10"
-                          aria-label={`Remove ${m.name}`}
-                          onClick={() => setRemoveTarget(m)}
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                        <div className="flex justify-end gap-1">
+                          {m.role === "telecaller" && (
+                            <button
+                              className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-primary hover:bg-primary/10"
+                              aria-label={`Change password for ${m.name}`}
+                              title="Change password"
+                              onClick={() => setPasswordTarget(m)}
+                            >
+                              <KeyRound size={16} />
+                            </button>
+                          )}
+                          <button
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-danger hover:bg-danger/10"
+                            aria-label={`Remove ${m.name}`}
+                            onClick={() => openRemoveModal(m)}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
                       </td>
                     )}
                   </tr>
@@ -197,9 +229,20 @@ export function TeamPage() {
                     {m.is_active ? "Active" : "Inactive"}
                   </button>
                   {isAdmin && (
-                    <button className="btn-ghost min-h-10 text-danger" aria-label={`Remove ${m.name}`} onClick={() => setRemoveTarget(m)}>
-                      <Trash2 size={16} /> Remove
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {m.role === "telecaller" && (
+                        <button
+                          className="btn-ghost min-h-10 text-primary"
+                          aria-label={`Change password for ${m.name}`}
+                          onClick={() => setPasswordTarget(m)}
+                        >
+                          <KeyRound size={16} /> Password
+                        </button>
+                      )}
+                      <button className="btn-ghost min-h-10 text-danger" aria-label={`Remove ${m.name}`} onClick={() => openRemoveModal(m)}>
+                        <Trash2 size={16} /> Remove
+                      </button>
+                    </div>
                   )}
                 </div>
               </article>
@@ -210,15 +253,65 @@ export function TeamPage() {
       </div>
 
       <AddMemberModal open={showAdd} onClose={() => setShowAdd(false)} />
+      <ResetPasswordModal
+        open={!!passwordTarget}
+        member={passwordTarget}
+        onClose={() => setPasswordTarget(null)}
+      />
       <ConfirmModal
         open={!!removeTarget}
-        onClose={() => setRemoveTarget(null)}
-        onConfirm={() => removeTarget && removeMutation.mutate(removeTarget.id)}
+        onClose={() => {
+          setRemoveTarget(null);
+          setRemoveManagerId("");
+        }}
+        onConfirm={() =>
+          removeTarget &&
+          removeMutation.mutate({
+            id: removeTarget.id,
+            managerId: needsLeadTransfer ? removeManagerId : undefined,
+          })
+        }
         title="Remove team member?"
-        message={`${removeTarget?.name}'s open leads will be moved to Unassigned. Their call history is kept. This cannot be undone.`}
+        message={
+          removeTarget
+            ? needsLeadTransfer
+              ? `${removeTarget.name} has ${removeTarget.assigned_leads_count} assigned lead${removeTarget.assigned_leads_count === 1 ? "" : "s"}. They will be transferred to the selected manager, and their call history will be kept.`
+              : `${removeTarget.name} has no assigned leads. Their call history will be kept. This cannot be undone.`
+            : ""
+        }
         confirmLabel="Remove Member"
         isLoading={removeMutation.isPending}
-      />
+        confirmDisabled={needsLeadTransfer && !removeManagerId}
+      >
+        {needsLeadTransfer && (
+          <div className="mt-5 rounded-lg border border-primary/10 bg-primary-soft/40 p-4">
+            <label htmlFor="remove-member-manager" className="mb-1.5 block text-xs font-semibold text-ink-700">
+              Transfer assigned leads to <span className="text-danger">*</span>
+            </label>
+            <select
+              id="remove-member-manager"
+              className="input w-full"
+              value={removeManagerId}
+              onChange={(event) => setRemoveManagerId(event.target.value)}
+              disabled={removeMutation.isPending || !selectableManagers.length}
+            >
+              <option value="">
+                {selectableManagers.length ? "Choose a manager..." : "No other active manager available"}
+              </option>
+              {selectableManagers.map((manager) => (
+                <option key={manager.id} value={manager.id}>
+                  {manager.name}
+                </option>
+              ))}
+            </select>
+            <p className={`mt-2 text-xs ${selectableManagers.length ? "text-ink-500" : "text-danger"}`}>
+              {selectableManagers.length
+                ? "All assigned leads, including converted and lost leads, will move to this manager."
+                : "Create or activate another manager before removing this member."}
+            </p>
+          </div>
+        )}
+      </ConfirmModal>
     </div>
   );
 }

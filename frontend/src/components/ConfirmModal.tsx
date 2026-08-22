@@ -1,3 +1,4 @@
+import { type ReactNode } from "react";
 import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
 import { Modal } from "./Modal";
 
@@ -10,6 +11,8 @@ interface ConfirmModalProps {
   confirmLabel?: string;
   danger?: boolean;
   isLoading?: boolean;
+  confirmDisabled?: boolean;
+  children?: ReactNode;
 }
 
 export function ConfirmModal({
@@ -21,6 +24,8 @@ export function ConfirmModal({
   confirmLabel = "Confirm",
   danger = true,
   isLoading = false,
+  confirmDisabled = false,
+  children,
 }: ConfirmModalProps) {
   const Icon = danger ? AlertTriangle : CheckCircle2;
 
@@ -39,7 +44,7 @@ export function ConfirmModal({
             type="button"
             className={danger ? "btn-danger" : "btn-primary"}
             onClick={onConfirm}
-            disabled={isLoading}
+            disabled={isLoading || confirmDisabled}
             aria-busy={isLoading}
           >
             {isLoading && <Loader2 size={16} className="animate-spin" aria-hidden="true" />}
@@ -62,6 +67,7 @@ export function ConfirmModal({
           <p className="text-sm leading-6 text-ink-700">{message}</p>
         </div>
       </div>
+      {children}
     </Modal>
   );
 }

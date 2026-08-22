@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -184,6 +184,34 @@ def _build_lead_filter_stmt(
     return stmt
 
 
+def _lead_queue_order(current: CurrentUser):
+    """Keep a telecaller's next actions at the top of the queue.
+
+    Overdue callbacks are the most time-sensitive work, followed by leads that
+    have never been contacted (call pending). Other leads keep the normal
+    newest-first ordering used by managers and admins.
+    """
+    if current.role != UserRole.telecaller:
+        return (Lead.created_at.desc(),)
+
+    now = datetime.now(timezone.utc)
+    overdue = Lead.next_follow_up_at.isnot(None) & (Lead.next_follow_up_at < now)
+    call_pending = Lead.last_contacted_at.is_(None)
+    priority = case(
+        (overdue, 0),
+        (call_pending, 1),
+        else_=2,
+    )
+    overdue_at = case((overdue, Lead.next_follow_up_at), else_=None)
+    pending_created_at = case((call_pending, Lead.created_at), else_=None)
+    return (
+        priority.asc(),
+        overdue_at.asc().nullslast(),
+        pending_created_at.asc().nullslast(),
+        Lead.created_at.desc(),
+    )
+
+
 @router.get("", response_model=PaginatedLeads)
 async def list_leads(
     current: CurrentUser = Depends(require_org_user),
@@ -210,10 +238,11 @@ async def list_leads(
     count_stmt = select(func.count()).select_from(stmt.subquery())
     total = (await db.execute(count_stmt)).scalar_one()
 
-    order_col = Lead.next_follow_up_at.asc().nullslast() if has_callback else Lead.created_at.desc()
     stmt = (
         stmt.options(*LEAD_LOAD_OPTIONS)
-        .order_by(order_col)
+        .order_by(
+            *((Lead.next_follow_up_at.asc().nullslast(),) if has_callback else _lead_queue_order(current))
+        )
         .offset((page - 1) * page_size)
         .limit(page_size)
     )
@@ -551,7 +580,11 @@ async def reassign_lead(
             )
     elif payload.assigned_to is not None:
         user_result = await db.execute(
-            select(User).where(User.id == payload.assigned_to, User.organization_id == current.organization_id)
+            select(User).where(
+                User.id == payload.assigned_to,
+                User.organization_id == current.organization_id,
+                User.is_active.is_(True),
+            )
         )
         if user_result.scalar_one_or_none() is None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Assignee not found in this organization")

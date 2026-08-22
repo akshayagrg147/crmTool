@@ -88,6 +88,7 @@ export interface UserOut {
 export interface TeamMemberOut extends UserOut {
   created_at: string;
   active_leads_count: number;
+  assigned_leads_count: number;
   state: string | null;
   city: string | null;
 }

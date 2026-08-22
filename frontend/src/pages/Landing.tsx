@@ -121,7 +121,13 @@ const OPERATING_SIGNALS = [
   },
 ];
 
-const MONTHLY_PRICE_PER_USER = 399;
+const PRICING_PLANS = {
+  6: { months: 6, monthlyPricePerUser: 399 },
+  12: { months: 12, monthlyPricePerUser: 299 },
+} as const;
+
+type PricingTerm = keyof typeof PRICING_PLANS;
+
 const INR = new Intl.NumberFormat("en-IN", {
   style: "currency",
   currency: "INR",
@@ -257,7 +263,14 @@ function PreviewPanel() {
 
 function PricingCalculator() {
   const [users, setUsers] = useState(10);
-  const monthlyTotal = users * MONTHLY_PRICE_PER_USER;
+  const [term, setTerm] = useState<PricingTerm>(6);
+  const plan = PRICING_PLANS[term];
+  const monthlyTotal = users * plan.monthlyPricePerUser;
+  const planTotal = monthlyTotal * plan.months;
+  const planSavings =
+    term === 12
+      ? users * (PRICING_PLANS[6].monthlyPricePerUser - PRICING_PLANS[12].monthlyPricePerUser) * plan.months
+      : 0;
 
   function updateUsers(next: number) {
     setUsers(Math.min(100, Math.max(1, next)));
@@ -269,17 +282,53 @@ function PricingCalculator() {
         <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-accent/15 blur-[90px]" aria-hidden="true" />
         <div className="relative">
           <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-accent-soft">
-            <Sparkles size={13} aria-hidden="true" /> One simple plan
+            <Sparkles size={13} aria-hidden="true" /> Flexible team plans
           </span>
+
+          <div className="mt-7">
+            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-white/40">Choose plan duration</p>
+            <div className="mt-3 grid grid-cols-2 gap-2" role="group" aria-label="Choose plan duration">
+              {([6, 12] as const).map((months) => {
+                const option = PRICING_PLANS[months];
+                const selected = term === months;
+                return (
+                  <button
+                    key={months}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => setTerm(months)}
+                    className={`relative rounded-[10px] border px-3 py-3 text-left transition-colors ${
+                      selected
+                        ? "border-accent/70 bg-accent/15 text-white"
+                        : "border-white/10 bg-white/[0.04] text-white/60 hover:border-white/25 hover:text-white"
+                    }`}
+                  >
+                    {months === 12 && (
+                      <span className="absolute -right-1.5 -top-2 rounded-full bg-accent px-2 py-0.5 text-[8px] font-bold uppercase tracking-wide text-primary-dark">
+                        Best value
+                      </span>
+                    )}
+                    <span className="block text-sm font-bold">{option.months} months</span>
+                    <span className="mt-0.5 block text-[11px] font-medium text-white/50">
+                      {INR.format(option.monthlyPricePerUser)} / user / month
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <p className="mt-7 text-sm font-medium text-white/60">Per active CRM user</p>
           <div className="mt-2 flex flex-wrap items-end gap-2">
             <span className="font-serif text-5xl font-semibold tracking-[-0.04em] text-white sm:text-6xl">
-              {INR.format(MONTHLY_PRICE_PER_USER)}
+              {INR.format(plan.monthlyPricePerUser)}
             </span>
             <span className="pb-2 text-sm font-medium text-white/55">/ user / month</span>
           </div>
           <p className="mt-5 max-w-md text-sm leading-6 text-white/65">
-            Pay for the people who use TalkoCRM. Add admins, managers, or telecallers as your team grows.
+            {term === 12
+              ? `Choose the annual plan and save ${INR.format(PRICING_PLANS[6].monthlyPricePerUser - PRICING_PLANS[12].monthlyPricePerUser)} per user every month.`
+              : "Start with the minimum 6-month commitment and pay only for the people who use TalkoCRM."}
           </p>
 
           <div className="mt-8 border-t border-white/10 pt-7">
@@ -350,12 +399,22 @@ function PricingCalculator() {
         <div className="mt-7 rounded-xl border border-ink-100 bg-[#F8F7F3] p-5" aria-live="polite">
           <div className="flex items-center justify-between gap-4 text-sm">
             <span className="flex items-center gap-2 text-ink-600"><UsersRound size={16} className="text-primary" aria-hidden="true" /> {users} active {users === 1 ? "user" : "users"}</span>
-            <span className="font-medium text-ink-600">{INR.format(MONTHLY_PRICE_PER_USER)} each</span>
+            <span className="font-medium text-ink-600">{INR.format(plan.monthlyPricePerUser)} each / month</span>
           </div>
           <div className="mt-4 flex flex-wrap items-end justify-between gap-2 border-t border-ink-100 pt-4">
             <span className="text-sm font-semibold text-ink-700">Estimated monthly total</span>
             <span className="font-serif text-4xl font-semibold tracking-[-0.035em] text-primary-dark">{INR.format(monthlyTotal)}</span>
           </div>
+          <div className="mt-4 flex items-center justify-between gap-4 border-t border-ink-100 pt-4 text-sm">
+            <span className="text-ink-600">Full {plan.months}-month plan value</span>
+            <span className="font-bold tabular-nums text-ink-900">{INR.format(planTotal)}</span>
+          </div>
+          {planSavings > 0 && (
+            <div className="mt-4 flex items-center justify-between gap-4 rounded-lg border border-secondary/15 bg-secondary/5 px-3 py-2.5 text-sm">
+              <span className="font-medium text-secondary">Your 12-month savings</span>
+              <span className="font-bold tabular-nums text-secondary">{INR.format(planSavings)}</span>
+            </div>
+          )}
         </div>
 
         <p className="mt-7 text-[10px] font-bold uppercase tracking-[0.15em] text-ink-400">Everything your team needs</p>
@@ -592,7 +651,7 @@ export function LandingPage() {
             <p className="page-eyebrow justify-center">Simple per-user pricing</p>
             <h2 className="page-title mt-3">Only pay as your team grows.</h2>
             <p className="mt-3 text-[15px] leading-7 text-ink-500">
-              One complete workspace, priced by the number of people who use it. Estimate your monthly cost instantly.
+              Start with a 6-month commitment or choose the 12-month plan for our best per-user rate.
             </p>
           </Reveal>
           <Reveal delay={100} className="mt-12">

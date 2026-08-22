@@ -97,7 +97,7 @@ export function LeadsPage() {
   });
 
   const { data: team } = useQuery({ queryKey: ["team"], queryFn: usersApi.list, enabled: !isTelecaller });
-  const telecallers = useMemo(() => team?.filter((t) => t.role === "telecaller") ?? [], [team]);
+  const telecallers = useMemo(() => team?.filter((t) => t.role === "telecaller" && t.is_active) ?? [], [team]);
   const workspaceManagers = useMemo(() => team?.filter((t) => t.role === "manager") ?? [], [team]);
   const { data: managers, isLoading: managersLoading } = useQuery({
     queryKey: ["managers"],

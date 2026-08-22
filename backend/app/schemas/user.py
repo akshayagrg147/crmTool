@@ -33,6 +33,10 @@ class TeamMemberUpdate(BaseModel):
     city: str | None = None
 
 
+class AdminResetPasswordRequest(BaseModel):
+    new_password: str = Field(min_length=6, max_length=128)
+
+
 class TeamMemberOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -44,5 +48,6 @@ class TeamMemberOut(BaseModel):
     is_active: bool
     created_at: datetime
     active_leads_count: int = 0
+    assigned_leads_count: int = 0
     state: str | None = None
     city: str | None = None
