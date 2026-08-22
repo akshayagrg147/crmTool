@@ -10,7 +10,14 @@ export function CreateOrgModal({ open, onClose }: { open: boolean; onClose: () =
   const [form, setForm] = useState({ name: "", admin_name: "", admin_phone: "", admin_email: "", admin_password: "" });
 
   const mutation = useMutation({
-    mutationFn: () => superAdminApi.createOrganization(form),
+    mutationFn: () =>
+      superAdminApi.createOrganization({
+        name: form.name.trim(),
+        admin_name: form.admin_name.trim(),
+        admin_phone: form.admin_phone.trim(),
+        admin_email: form.admin_email.trim() || undefined,
+        admin_password: form.admin_password,
+      }),
     onSuccess: (org) => {
       queryClient.invalidateQueries({ queryKey: ["organizations"] });
       queryClient.invalidateQueries({ queryKey: ["platform-stats"] });
@@ -21,7 +28,11 @@ export function CreateOrgModal({ open, onClose }: { open: boolean; onClose: () =
     onError: (err: any) => toast(err?.response?.data?.detail ?? "Couldn't create organization.", "error"),
   });
 
-  const canSubmit = form.name && form.admin_name && form.admin_phone && form.admin_password.length >= 6;
+  const canSubmit =
+    !!form.name.trim() &&
+    !!form.admin_name.trim() &&
+    !!form.admin_phone.trim() &&
+    form.admin_password.length >= 6;
 
   return (
     <Modal
@@ -42,7 +53,7 @@ export function CreateOrgModal({ open, onClose }: { open: boolean; onClose: () =
       <div className="flex flex-col gap-3.5">
         <div>
           <label htmlFor="new-org-name" className="text-xs font-medium text-ink-500 mb-1.5 block">Organization name</label>
-          <input id="new-org-name" className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <input id="new-org-name" className="input" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </div>
         <div className="h-px bg-ink-100" />
         <p className="text-xs font-semibold text-ink-700">First Admin</p>
@@ -51,6 +62,7 @@ export function CreateOrgModal({ open, onClose }: { open: boolean; onClose: () =
           <input
             id="new-org-admin-name"
             className="input"
+            required
             value={form.admin_name}
             onChange={(e) => setForm({ ...form, admin_name: e.target.value })}
           />
@@ -63,6 +75,8 @@ export function CreateOrgModal({ open, onClose }: { open: boolean; onClose: () =
             type="tel"
             inputMode="tel"
             autoComplete="tel"
+            required
+            minLength={6}
             value={form.admin_phone}
             onChange={(e) => setForm({ ...form, admin_phone: e.target.value })}
           />
@@ -84,6 +98,8 @@ export function CreateOrgModal({ open, onClose }: { open: boolean; onClose: () =
             className="input"
             type="password"
             autoComplete="new-password"
+            required
+            minLength={6}
             value={form.admin_password}
             onChange={(e) => setForm({ ...form, admin_password: e.target.value })}
             placeholder="Minimum 6 characters"

@@ -42,6 +42,46 @@ async def test_super_admin_can_view_organization_contacts(client, db_session):
 
 
 @pytest.mark.asyncio
+async def test_super_admin_can_create_organization_without_optional_email(client, db_session):
+    super_admin = User(
+        organization_id=None,
+        name="Platform Owner",
+        phone="9300000100",
+        password_hash=hash_password("Password@123"),
+        role=UserRole.super_admin,
+        is_active=True,
+    )
+    db_session.add(super_admin)
+    await db_session.commit()
+    await db_session.refresh(super_admin)
+
+    response = await client.post(
+        "/api/super-admin/organizations",
+        headers={"Authorization": f"Bearer {_token(super_admin)}"},
+        json={
+            "name": "Created Organization",
+            "admin_name": "Created Administrator",
+            "admin_phone": "9300000101",
+            "admin_email": "",
+            "admin_password": "Password@123",
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["name"] == "Created Organization"
+    assert body["user_count"] == 1
+    assert body["lead_count"] == 0
+
+    created_admin = (await db_session.execute(select(User).where(User.phone == "9300000101"))).scalar_one()
+    assert created_admin.email is None
+    settings = (await db_session.execute(
+        select(DistributionSettings).where(DistributionSettings.organization_id == body["id"])
+    )).scalar_one()
+    assert settings.rotation_index == 0
+
+
+@pytest.mark.asyncio
 async def test_organization_details_require_super_admin(client, db_session):
     org, admin = await create_org_with_admin(db_session, "Private Details Org", "9300000103")
 

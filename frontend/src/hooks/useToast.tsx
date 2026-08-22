@@ -10,7 +10,7 @@ interface Toast {
 }
 
 interface ToastContextValue {
-  toast: (message: string, kind?: ToastKind) => void;
+  toast: (message: unknown, kind?: ToastKind) => void;
 }
 
 const ToastContext = createContext<ToastContextValue | null>(null);
@@ -25,6 +25,36 @@ const kindStyles: Record<ToastKind, { icon: typeof CheckCircle2; iconWrap: strin
   info: { icon: Info, iconWrap: "bg-secondary/10 text-secondary", accent: "bg-secondary" },
 };
 
+function normalizeToastMessage(message: unknown): string {
+  if (typeof message === "string") return message;
+  if (message instanceof Error) return message.message || "Something went wrong.";
+
+  if (Array.isArray(message)) {
+    const parts = message
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object") {
+          const value = item as Record<string, unknown>;
+          const field = Array.isArray(value.loc) ? value.loc.at(-1) : undefined;
+          const detail = typeof value.msg === "string" ? value.msg : typeof value.message === "string" ? value.message : null;
+          if (detail && typeof field === "string" && field !== "body") return `${field}: ${detail}`;
+          if (detail) return detail;
+        }
+        return null;
+      })
+      .filter((part): part is string => !!part);
+    return parts.join("; ") || "Something went wrong.";
+  }
+
+  if (message && typeof message === "object") {
+    const value = message as Record<string, unknown>;
+    if (typeof value.message === "string") return value.message;
+    if (typeof value.detail === "string") return value.detail;
+  }
+
+  return message == null ? "Something went wrong." : String(message);
+}
+
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
@@ -36,9 +66,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const toast = useCallback(
-    (message: string, kind: ToastKind = "info") => {
+    (message: unknown, kind: ToastKind = "info") => {
       const id = ++idCounter;
-      setToasts((prev) => [...prev, { id, kind, message }]);
+      setToasts((prev) => [...prev, { id, kind, message: normalizeToastMessage(message) }]);
       setTimeout(() => dismiss(id), AUTO_DISMISS_MS);
     },
     [dismiss]
