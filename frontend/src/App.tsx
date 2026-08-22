@@ -4,7 +4,7 @@ import { getAccessToken } from "@/api/client";
 import { AppShell } from "@/components/AppShell";
 import { PageLoading } from "@/components/Spinner";
 import { LoginPage } from "@/pages/Login";
-import { LandingPage } from "@/pages/Landing";
+import { LandingPageV2 } from "@/pages/LandingV2";
 import { DashboardPage } from "@/pages/app/Dashboard";
 import { LeadsPage } from "@/pages/app/Leads";
 import { FollowUpsPage } from "@/pages/app/FollowUps";
@@ -38,7 +38,7 @@ function RootRoute() {
 
   if (hasToken && isLoading) return <PageLoading />;
   if (hasToken && user) return <Navigate to={homeForRole(user.role)} replace />;
-  return <LandingPage />;
+  return <LandingPageV2 />;
 }
 
 function LoginRoute() {
