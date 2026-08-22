@@ -188,7 +188,7 @@ export function DashboardPage() {
           to="/leads"
         />
         <KpiCard label="Assigned" value={String(data.kpis.assigned)} icon={UserCheck} color="indigo" to="/leads" />
-        <KpiCard label="Unassigned" value={String(data.kpis.unassigned)} icon={UserRoundX} color="orange" to="/leads?assignee=unassigned" />
+        <KpiCard label="Unassigned" value={String(data.kpis.unassigned ?? 0)} icon={UserRoundX} color="orange" to="/leads?assignee=unassigned" />
         <KpiCard
           label="Converted"
           value={String(data.kpis.converted)}
