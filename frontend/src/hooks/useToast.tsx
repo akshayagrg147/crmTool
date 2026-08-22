@@ -35,7 +35,7 @@ function normalizeToastMessage(message: unknown): string {
         if (typeof item === "string") return item;
         if (item && typeof item === "object") {
           const value = item as Record<string, unknown>;
-          const field = Array.isArray(value.loc) ? value.loc.at(-1) : undefined;
+          const field = Array.isArray(value.loc) && value.loc.length > 0 ? value.loc[value.loc.length - 1] : undefined;
           const detail = typeof value.msg === "string" ? value.msg : typeof value.message === "string" ? value.message : null;
           if (detail && typeof field === "string" && field !== "body") return `${field}: ${detail}`;
           if (detail) return detail;
