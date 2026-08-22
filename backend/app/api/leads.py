@@ -198,7 +198,11 @@ def _lead_queue_order(current: CurrentUser):
     newest-first ordering used by managers and admins.
     """
     if current.role != UserRole.telecaller:
-        return (Lead.created_at.desc(),)
+        # Keep the admin/manager queue actionable: leads that still need an
+        # owner appear first, while preserving newest-first ordering within
+        # both groups.
+        unassigned_first = case((Lead.assigned_to.is_(None), 0), else_=1)
+        return (unassigned_first.asc(), Lead.created_at.desc())
 
     now = datetime.now(timezone.utc)
     overdue = Lead.next_follow_up_at.isnot(None) & (Lead.next_follow_up_at < now)

@@ -80,6 +80,11 @@ export function LeadsPage() {
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
+    const assigneeFromUrl = searchParams.get("assignee") ?? "";
+    setAssigneeFilter((current) => (current === assigneeFromUrl ? current : assigneeFromUrl));
+  }, [searchParams]);
+
+  useEffect(() => {
     setPage(1);
     setSelectedLeadIds([]);
     setBulkAssigneeId("");
@@ -296,7 +301,20 @@ export function LeadsPage() {
           <option value="lost">Lost</option>
         </select>
         {!isTelecaller && (
-          <select aria-label="Filter by assignee" className="input w-full py-2 sm:w-auto" value={assigneeFilter} onChange={(e) => setAssigneeFilter(e.target.value)}>
+          <select
+            aria-label="Filter by assignee"
+            className="input w-full py-2 sm:w-auto"
+            value={assigneeFilter}
+            onChange={(e) => {
+              const value = e.target.value;
+              setAssigneeFilter(value);
+              setSearchParams((params) => {
+                if (value) params.set("assignee", value);
+                else params.delete("assignee");
+                return params;
+              });
+            }}
+          >
             <option value="">All Assignees</option>
             <option value="unassigned">Unassigned</option>
             {workspaceManagers.length > 0 && (
