@@ -8,6 +8,7 @@ class DashboardKPIs(BaseModel):
     total_leads_delta: float
     assigned: int
     assigned_delta: float
+    unassigned: int
     converted: int
     converted_delta: float
     talk_time_minutes: float

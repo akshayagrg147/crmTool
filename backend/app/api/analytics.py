@@ -65,6 +65,9 @@ async def get_dashboard(current: CurrentUser = Depends(require_org_user), db: As
     assigned_q = _scope_lead_query(select(func.count()).select_from(Lead).where(Lead.assigned_to.isnot(None)), current)
     assigned = (await db.execute(assigned_q)).scalar_one()
 
+    unassigned_q = _scope_lead_query(select(func.count()).select_from(Lead).where(Lead.assigned_to.is_(None)), current)
+    unassigned = (await db.execute(unassigned_q)).scalar_one()
+
     converted_q = _scope_lead_query(
         select(func.count()).select_from(Lead).where(Lead.status == LeadStatus.converted), current
     )
@@ -113,6 +116,7 @@ async def get_dashboard(current: CurrentUser = Depends(require_org_user), db: As
         total_leads_delta=pct_delta(total_curr, total_prev),
         assigned=assigned,
         assigned_delta=0.0,
+        unassigned=unassigned,
         converted=converted,
         converted_delta=pct_delta(converted_period, 0),
         talk_time_minutes=talk_time,

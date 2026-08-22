@@ -54,7 +54,7 @@ export function LeadsPage() {
   const [search, setSearch] = useState(searchParams.get("q") ?? "");
   const [sourceFilter, setSourceFilter] = useState<LeadSource | "">("");
   const [statusFilter, setStatusFilter] = useState<LeadStatus | "">((searchParams.get("status") as LeadStatus) ?? "");
-  const [assigneeFilter, setAssigneeFilter] = useState<string>("");
+  const [assigneeFilter, setAssigneeFilter] = useState<string>(searchParams.get("assignee") ?? "");
   const [categoryFilter, setCategoryFilter] = useState<LeadCategory | "">("");
   const [cityFilter, setCityFilter] = useState<string>("");
   const [callbackFilter, setCallbackFilter] = useState<"" | "scheduled" | "overdue">("");
@@ -415,11 +415,13 @@ export function LeadsPage() {
               {data.items.map((lead) => (
                 <article key={lead.id} className={`p-4 ${selectedLeadIds.includes(lead.id) ? "bg-primary-soft/30" : ""}`}>
                   <div className="flex items-start gap-3">
-                    {canManage && !lead.assigned_to && (
+                    {canManage && (
                       <input
                         type="checkbox"
-                        className="mt-2 h-4 w-4 shrink-0 accent-primary"
+                        className="mt-2 h-4 w-4 shrink-0 accent-primary disabled:cursor-not-allowed disabled:opacity-40"
                         aria-label={`Select ${lead.name}`}
+                        title={lead.assigned_to ? "Assigned leads cannot be selected for bulk assignment" : undefined}
+                        disabled={!!lead.assigned_to}
                         checked={selectedLeadIds.includes(lead.id)}
                         onChange={() => toggleLeadSelection(lead.id)}
                       />
@@ -497,16 +499,16 @@ export function LeadsPage() {
                   >
                     {canManage && (
                       <td className="px-5 py-3">
-                        {lead.assigned_to ? null : (
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 accent-primary"
-                            aria-label={`Select ${lead.name}`}
-                            checked={selectedLeadIds.includes(lead.id)}
-                            onChange={() => toggleLeadSelection(lead.id)}
-                            onClick={(event) => event.stopPropagation()}
-                          />
-                        )}
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-primary disabled:cursor-not-allowed disabled:opacity-40"
+                          aria-label={`Select ${lead.name}`}
+                          title={lead.assigned_to ? "Assigned leads cannot be selected for bulk assignment" : undefined}
+                          disabled={!!lead.assigned_to}
+                          checked={selectedLeadIds.includes(lead.id)}
+                          onChange={() => toggleLeadSelection(lead.id)}
+                          onClick={(event) => event.stopPropagation()}
+                        />
                       </td>
                     )}
                     <td className="px-5 py-3 text-ink-500 tabular-nums">{(page - 1) * pageSize + i + 1}</td>

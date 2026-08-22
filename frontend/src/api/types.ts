@@ -228,6 +228,7 @@ export interface DashboardKPIs {
   total_leads_delta: number;
   assigned: number;
   assigned_delta: number;
+  unassigned: number;
   converted: number;
   converted_delta: number;
   talk_time_minutes: number;
