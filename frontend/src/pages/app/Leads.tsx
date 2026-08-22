@@ -41,7 +41,8 @@ import { ChangeCategoryModal } from "@/components/leads/ChangeCategoryModal";
 import { formatCallbackTime, formatDate, formatDateTime, initials, whatsappLink } from "@/lib/format";
 import type { LeadCategory, LeadOut, LeadSource, LeadStatus } from "@/api/types";
 
-const PAGE_SIZE = 15;
+const PAGE_SIZE_OPTIONS = [50, 100, 200] as const;
+type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
 
 export function LeadsPage() {
   const { user } = useAuth();
@@ -58,6 +59,7 @@ export function LeadsPage() {
   const [cityFilter, setCityFilter] = useState<string>("");
   const [callbackFilter, setCallbackFilter] = useState<"" | "scheduled" | "overdue">("");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<PageSize>(50);
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
   const [bulkAssigneeId, setBulkAssigneeId] = useState("");
 
@@ -81,7 +83,7 @@ export function LeadsPage() {
     setPage(1);
     setSelectedLeadIds([]);
     setBulkAssigneeId("");
-  }, [search, sourceFilter, statusFilter, assigneeFilter, categoryFilter, cityFilter, callbackFilter]);
+  }, [search, sourceFilter, statusFilter, assigneeFilter, categoryFilter, cityFilter, callbackFilter, pageSize]);
 
   const filters = {
     q: search || undefined,
@@ -94,7 +96,7 @@ export function LeadsPage() {
     has_callback: callbackFilter ? true : undefined,
     overdue_only: callbackFilter === "overdue" ? true : undefined,
     page,
-    page_size: PAGE_SIZE,
+    page_size: pageSize,
   };
 
   const { data, isLoading, isPlaceholderData } = useQuery({
@@ -145,7 +147,7 @@ export function LeadsPage() {
 
   const canManage = user?.role === "admin" || user?.role === "manager";
   const canAdmin = user?.role === "admin";
-  const totalPages = data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1;
+  const totalPages = data ? Math.max(1, Math.ceil(data.total / pageSize)) : 1;
   const visibleUnassignedIds = useMemo(
     () => data?.items.filter((lead) => !lead.assigned_to).map((lead) => lead.id) ?? [],
     [data?.items]
@@ -507,7 +509,7 @@ export function LeadsPage() {
                         )}
                       </td>
                     )}
-                    <td className="px-5 py-3 text-ink-500 tabular-nums">{(page - 1) * PAGE_SIZE + i + 1}</td>
+                    <td className="px-5 py-3 text-ink-500 tabular-nums">{(page - 1) * pageSize + i + 1}</td>
                     <td className="px-5 py-3 text-ink-700 text-xs whitespace-nowrap">{formatDate(lead.created_at)}</td>
                     <td className="px-5 py-3 cursor-pointer" onClick={() => setDetailLead(lead)}>
                       <div className="flex items-center gap-2.5">
@@ -614,23 +616,42 @@ export function LeadsPage() {
         )}
       </div>
 
-      {data && data.total > PAGE_SIZE && (
-        <div className="flex items-center justify-between text-sm text-ink-500">
-          <span>
-            Page {page} of {totalPages}
-          </span>
-          <div className="flex gap-2">
-            <button className="btn-secondary text-xs px-3 py-1.5" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-              Previous
-            </button>
-            <button
-              className="btn-secondary text-xs px-3 py-1.5"
-              disabled={page >= totalPages}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              Next
-            </button>
+      {data && (
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-ink-500">
+          <div className="flex flex-wrap items-center gap-3">
+            <span>
+              Page {page} of {totalPages}
+            </span>
+            <label className="flex items-center gap-2">
+              <span>Rows per page</span>
+              <select
+                aria-label="Rows per page"
+                className="input w-auto py-1.5 text-xs"
+                value={pageSize}
+                onChange={(event) => setPageSize(Number(event.target.value) as PageSize)}
+              >
+                {PAGE_SIZE_OPTIONS.map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
+          {data.total > pageSize && (
+            <div className="flex gap-2">
+              <button className="btn-secondary text-xs px-3 py-1.5" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                Previous
+              </button>
+              <button
+                className="btn-secondary text-xs px-3 py-1.5"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Next
+              </button>
+            </div>
+          )}
         </div>
       )}
 
