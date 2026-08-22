@@ -88,6 +88,7 @@ export interface LeadFilters {
   source?: LeadSource;
   status?: LeadStatus;
   assigned_to?: string;
+  unassigned_only?: boolean;
   category?: LeadCategory;
   state?: string;
   city?: string;

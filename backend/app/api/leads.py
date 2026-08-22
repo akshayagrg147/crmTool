@@ -146,6 +146,7 @@ def _build_lead_filter_stmt(
     source: LeadSource | None,
     status_filter: LeadStatus | None,
     assigned_to: uuid.UUID | None,
+    unassigned_only: bool,
     category: str | None,
     state: str | None,
     city: str | None,
@@ -159,6 +160,8 @@ def _build_lead_filter_stmt(
         stmt = stmt.where(Lead.assigned_to == current.id)
     elif assigned_to is not None:
         stmt = stmt.where(Lead.assigned_to == assigned_to)
+    if unassigned_only:
+        stmt = stmt.where(Lead.assigned_to.is_(None))
 
     if source is not None:
         stmt = stmt.where(Lead.source == source)
@@ -219,6 +222,7 @@ async def list_leads(
     source: LeadSource | None = None,
     status_filter: LeadStatus | None = Query(default=None, alias="status"),
     assigned_to: uuid.UUID | None = None,
+    unassigned_only: bool = False,
     category: str | None = None,
     state: str | None = None,
     city: str | None = None,
@@ -230,7 +234,7 @@ async def list_leads(
     page_size: int = Query(default=20, ge=1, le=200),
 ):
     stmt = _build_lead_filter_stmt(
-        current, source, status_filter, assigned_to, category, state, city, dnd, q, has_callback
+        current, source, status_filter, assigned_to, unassigned_only, category, state, city, dnd, q, has_callback
     )
     if overdue_only:
         stmt = stmt.where(Lead.next_follow_up_at.isnot(None), Lead.next_follow_up_at < datetime.now(timezone.utc))
@@ -264,8 +268,11 @@ async def export_leads(
     city: str | None = None,
     dnd: bool | None = None,
     q: str | None = None,
+    unassigned_only: bool = False,
 ):
-    stmt = _build_lead_filter_stmt(current, source, status_filter, assigned_to, category, state, city, dnd, q)
+    stmt = _build_lead_filter_stmt(
+        current, source, status_filter, assigned_to, unassigned_only, category, state, city, dnd, q
+    )
     stmt = stmt.options(*LEAD_LOAD_OPTIONS).order_by(Lead.created_at.desc())
     result = await db.execute(stmt)
     leads = list(result.scalars().unique().all())

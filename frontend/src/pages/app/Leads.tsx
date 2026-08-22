@@ -81,7 +81,8 @@ export function LeadsPage() {
     q: search || undefined,
     source: sourceFilter || undefined,
     status: statusFilter || undefined,
-    assigned_to: isTelecaller ? undefined : assigneeFilter || undefined,
+    assigned_to: isTelecaller || assigneeFilter === "unassigned" ? undefined : assigneeFilter || undefined,
+    unassigned_only: !isTelecaller && assigneeFilter === "unassigned" ? true : undefined,
     category: categoryFilter || undefined,
     city: cityFilter || undefined,
     has_callback: callbackFilter ? true : undefined,
@@ -234,6 +235,7 @@ export function LeadsPage() {
         {!isTelecaller && (
           <select aria-label="Filter by assignee" className="input w-full py-2 sm:w-auto" value={assigneeFilter} onChange={(e) => setAssigneeFilter(e.target.value)}>
             <option value="">All Assignees</option>
+            <option value="unassigned">Unassigned</option>
             {workspaceManagers.length > 0 && (
               <optgroup label="Managers">
                 {workspaceManagers.map((manager) => (
@@ -661,10 +663,14 @@ function LeadActionsMenu({
             <Pencil size={15} /> Edit Lead
           </button>
           <div className="h-px bg-ink-100 my-1" />
-          <p className="px-3 pt-1 pb-1 text-xs font-medium text-ink-500">Reassign to</p>
-          <button className={itemClass} onClick={() => reassignMutation.mutate(null)}>
-            <UserRoundX size={15} className="text-ink-500" /> Unassigned
-          </button>
+          <p className="px-3 pt-1 pb-1 text-xs font-medium text-ink-500">
+            {lead.assigned_to ? "Reassign to" : "Assign to"}
+          </p>
+          {lead.assigned_to && (
+            <button className={itemClass} onClick={() => reassignMutation.mutate(null)}>
+              <UserRoundX size={15} className="text-ink-500" /> Unassigned
+            </button>
+          )}
           {telecallers.map((t) => (
             <button key={t.id} className={itemClass} onClick={() => reassignMutation.mutate(t.id)}>
               {t.name}
