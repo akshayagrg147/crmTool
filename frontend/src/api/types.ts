@@ -49,6 +49,11 @@ export interface DuplicateLeadMatch {
   assignee_name: string | null;
 }
 
+export interface MergeLeadResult {
+  lead: LeadOut;
+  merged_lead_id: string;
+}
+
 export interface MyOrganization {
   id: string;
   name: string;
@@ -122,6 +127,8 @@ export interface LeadOut {
   credit_limit: number | null;
   outstanding_amount: number | null;
   dnd: boolean;
+  score: number;
+  score_band: "hot" | "warm" | "cool";
 }
 
 export interface BulkReassignResult {
@@ -144,6 +151,25 @@ export interface AssignmentHistoryOut {
   action: string;
   source: string;
   created_at: string;
+}
+
+export interface LeadActivityOut {
+  id: string;
+  lead_id: string;
+  event_type: "created" | "call" | "assignment";
+  occurred_at: string;
+  actor_id: string | null;
+  actor_name: string | null;
+  title: string;
+  body: string | null;
+  source: string | null;
+  call_outcome: LeadStatus | null;
+  duration_minutes: number | null;
+  order_value: number | null;
+  next_follow_up_at: string | null;
+  assignment_action: string | null;
+  previous_assignee_name: string | null;
+  new_assignee_name: string | null;
 }
 
 export interface LeadCategoryOption {
@@ -218,6 +244,37 @@ export interface FollowUpOut {
 
 export interface PaginatedFollowUps {
   items: FollowUpOut[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export type TaskStatus = "open" | "completed" | "cancelled";
+export type TaskPriority = "low" | "normal" | "high" | "urgent";
+export type TaskType = "callback" | "task" | "meeting" | "reminder";
+
+export interface TaskOut {
+  id: string;
+  organization_id: string;
+  lead_id: string | null;
+  assigned_to: string | null;
+  assigned_to_name: string | null;
+  created_by: string | null;
+  created_by_name: string | null;
+  lead_name: string | null;
+  lead_phone: string | null;
+  title: string;
+  description: string | null;
+  task_type: TaskType;
+  priority: TaskPriority;
+  status: TaskStatus;
+  due_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+}
+
+export interface PaginatedTasks {
+  items: TaskOut[];
   total: number;
   page: number;
   page_size: number;

@@ -6,6 +6,7 @@ from app.models.call_log import CallLog
 from app.models.distribution_settings import DistributionSettings
 from app.models.integration import LeadIntegration
 from app.models.lead_assignment import LeadAssignmentHistory
+from app.models.task import Task
 
 __all__ = [
     "Organization",
@@ -16,4 +17,5 @@ __all__ = [
     "DistributionSettings",
     "LeadIntegration",
     "LeadAssignmentHistory",
+    "Task",
 ]

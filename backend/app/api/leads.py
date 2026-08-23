@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -28,6 +28,8 @@ from app.schemas.lead import (
     LeadCategoryOptionOut,
     LeadCreate,
     LeadOut,
+    MergeLeadRequest,
+    MergeLeadResult,
     LeadUpdate,
     LastCallOut,
     PaginatedLeads,
@@ -62,7 +64,46 @@ def _to_out(lead: Lead) -> LeadOut:
             notes=latest.notes,
             created_at=latest.created_at,
         )
+    out.score, out.score_band = _lead_score(lead)
     return out
+
+
+def _lead_score(lead: Lead) -> tuple[int, str]:
+    """Calculate a transparent qualification score from data already in the CRM.
+
+    This deliberately stays rule-based and explainable until an organization
+    chooses a separate scoring model. It gives teams an immediate prioritization
+    signal without adding another required workflow or external service.
+    """
+    status_points = {
+        LeadStatus.converted: 100,
+        LeadStatus.follow_up: 68,
+        LeadStatus.new: 46,
+        LeadStatus.not_picked: 30,
+        LeadStatus.lost: 12,
+    }
+    score = status_points.get(lead.status, 40)
+    if lead.assigned_to:
+        score += 5
+    if lead.last_contacted_at:
+        score += 7
+    if lead.next_follow_up_at:
+        score += 10 if lead.next_follow_up_at >= datetime.now(timezone.utc) else -12
+    if lead.notes:
+        score += 4
+    if lead.city and lead.state:
+        score += 4
+    if lead.specialty:
+        score += 4
+    if lead.drug_license_number:
+        score += 3
+    if lead.interested_categories and len(lead.interested_categories) > 1:
+        score += 3
+    if lead.credit_limit is not None:
+        score += 2
+    score = max(0, min(100, score))
+    band = "hot" if score >= 75 else "warm" if score >= 45 else "cool"
+    return score, band
 
 
 def _assignment_to_out(event: LeadAssignmentHistory) -> AssignmentHistoryOut:
@@ -378,6 +419,80 @@ async def check_duplicate_phone(
         )
         for lead in matches
     ]
+
+
+@router.post("/merge", response_model=MergeLeadResult)
+async def merge_duplicate_lead(
+    payload: MergeLeadRequest,
+    current: CurrentUser = Depends(require_admin_or_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """Merge one duplicate into a primary lead without losing CRM history."""
+    if payload.primary_lead_id == payload.duplicate_lead_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Choose two different leads to merge")
+
+    result = await db.execute(
+        select(Lead)
+        .options(*LEAD_LOAD_OPTIONS)
+        .where(
+            Lead.organization_id == current.organization_id,
+            Lead.id.in_([payload.primary_lead_id, payload.duplicate_lead_id]),
+        )
+    )
+    leads_by_id = {lead.id: lead for lead in result.scalars().all()}
+    primary = leads_by_id.get(payload.primary_lead_id)
+    duplicate = leads_by_id.get(payload.duplicate_lead_id)
+    if primary is None or duplicate is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "One or both leads were not found")
+
+    # Keep the primary record's identity while retaining the richer details
+    # from the duplicate when the primary field is blank.
+    for field in ("city", "state", "notes", "drug_license_number", "specialty"):
+        if not getattr(primary, field) and getattr(duplicate, field):
+            setattr(primary, field, getattr(duplicate, field))
+    if primary.credit_limit is None:
+        primary.credit_limit = duplicate.credit_limit
+    if primary.outstanding_amount is None:
+        primary.outstanding_amount = duplicate.outstanding_amount
+    primary.interested_categories = list(
+        dict.fromkeys((primary.interested_categories or []) + (duplicate.interested_categories or []))
+    )
+    if primary.assigned_to is None and duplicate.assigned_to is not None:
+        primary.assigned_to = duplicate.assigned_to
+        record_assignment(
+            db,
+            organization_id=current.organization_id,
+            lead_id=primary.id,
+            previous_assignee_id=None,
+            new_assignee_id=primary.assigned_to,
+            assigned_by_id=current.id,
+            action="merged",
+            source="merge",
+        )
+    if primary.next_follow_up_at is None or (
+        duplicate.next_follow_up_at is not None and duplicate.next_follow_up_at < primary.next_follow_up_at
+    ):
+        primary.next_follow_up_at = duplicate.next_follow_up_at
+    if primary.last_contacted_at is None or (
+        duplicate.last_contacted_at is not None and duplicate.last_contacted_at > primary.last_contacted_at
+    ):
+        primary.last_contacted_at = duplicate.last_contacted_at
+
+    # Re-point all dependent history before deleting the duplicate. Calls,
+    # tasks, and assignment events remain available from the primary record.
+    await db.execute(update(CallLog).where(CallLog.lead_id == duplicate.id).values(lead_id=primary.id))
+    await db.execute(
+        update(LeadAssignmentHistory).where(LeadAssignmentHistory.lead_id == duplicate.id).values(lead_id=primary.id)
+    )
+    from app.models.task import Task
+
+    await db.execute(update(Task).where(Task.lead_id == duplicate.id).values(lead_id=primary.id))
+    await db.delete(duplicate)
+    await db.commit()
+
+    refreshed = await db.execute(select(Lead).options(*LEAD_LOAD_OPTIONS).where(Lead.id == primary.id))
+    primary = refreshed.scalar_one()
+    return MergeLeadResult(lead=_to_out(primary), merged_lead_id=duplicate.id)
 
 
 @router.get("/categories", response_model=list[LeadCategoryOptionOut])

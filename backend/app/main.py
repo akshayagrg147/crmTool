@@ -12,6 +12,7 @@ from app.api import (
     lost_deals,
     organization,
     super_admin,
+    tasks,
     users,
 )
 from app.core.config import settings
@@ -42,6 +43,7 @@ app.include_router(super_admin.router, prefix="/api")
 app.include_router(organization.router, prefix="/api")
 app.include_router(integrations.router, prefix="/api")
 app.include_router(integrations.webhook_router, prefix="/api")
+app.include_router(tasks.router, prefix="/api")
 
 
 @app.on_event("startup")

@@ -2,6 +2,7 @@ import { type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  Activity,
   CalendarClock,
   CheckCircle2,
   IndianRupee,
@@ -10,10 +11,11 @@ import {
   Phone,
   PhoneCall,
   ShieldAlert,
+  UserRound,
   XCircle,
 } from "lucide-react";
 import { Modal } from "@/components/Modal";
-import { callsApi, leadsApi } from "@/api/endpoints";
+import { callsApi } from "@/api/endpoints";
 import { StatusBadge, SourceBadge, CategoryBadge, DndBadge } from "@/components/StatusBadge";
 import {
   formatCallbackTime,
@@ -108,14 +110,9 @@ export function LeadDetailModal({
   onEdit?: () => void;
   onLogCall?: () => void;
 }) {
-  const { data: history, isLoading } = useQuery({
-    queryKey: ["call-history", lead?.id],
-    queryFn: () => callsApi.history(lead!.id),
-    enabled: open && !!lead,
-  });
-  const { data: assignmentHistory, isLoading: assignmentHistoryLoading } = useQuery({
-    queryKey: ["assignment-history", lead?.id],
-    queryFn: () => leadsApi.assignmentHistory(lead!.id),
+  const { data: activity, isLoading: activityLoading } = useQuery({
+    queryKey: ["lead-activity", lead?.id],
+    queryFn: () => callsApi.activity(lead!.id),
     enabled: open && !!lead,
   });
 
@@ -128,7 +125,8 @@ export function LeadDetailModal({
   const tone = toneStyles[step.tone];
 
   const location = [lead.city, lead.state].filter(Boolean).join(", ");
-  const totalTalkTime = history?.reduce((sum, c) => sum + c.duration_minutes, 0) ?? 0;
+  const callActivity = activity?.filter((event) => event.event_type === "call") ?? [];
+  const totalTalkTime = callActivity.reduce((sum, event) => sum + (event.duration_minutes ?? 0), 0);
   const activeCallbackAt = lead.next_follow_up_at ? new Date(lead.next_follow_up_at).getTime() : null;
 
   return (
@@ -208,6 +206,29 @@ export function LeadDetailModal({
                 ))}
               </div>
             </LabelledBadge>
+            <LabelledBadge label="Qualification score">
+              <div className="flex items-center gap-2">
+                <span
+                  className={`badge ${
+                    lead.score_band === "hot"
+                      ? "bg-danger/10 text-danger"
+                      : lead.score_band === "warm"
+                        ? "bg-warning/10 text-warning"
+                        : "bg-ink-100 text-ink-600"
+                  }`}
+                >
+                  {lead.score}/100 · {lead.score_band}
+                </span>
+                <span className="h-1.5 w-20 overflow-hidden rounded-full bg-ink-100">
+                  <span
+                    className={`block h-full rounded-full ${
+                      lead.score_band === "hot" ? "bg-danger" : lead.score_band === "warm" ? "bg-warning" : "bg-ink-400"
+                    }`}
+                    style={{ width: `${lead.score}%` }}
+                  />
+                </span>
+              </div>
+            </LabelledBadge>
           </div>
         </Section>
 
@@ -280,99 +301,47 @@ export function LeadDetailModal({
         )}
 
         <Section
-          title="Assignment history"
+          title="Activity timeline"
           aside={
-            assignmentHistory?.length
-              ? `${assignmentHistory.length} ${assignmentHistory.length === 1 ? "change" : "changes"}`
+            activity?.length
+              ? `${activity.length} ${activity.length === 1 ? "event" : "events"}${callActivity.length ? ` · ${formatMinutes(totalTalkTime)} talk time` : ""}`
               : undefined
           }
         >
-          {assignmentHistoryLoading ? (
+          {activityLoading ? (
             <p className="text-sm text-ink-500">Loading…</p>
-          ) : !assignmentHistory?.length ? (
+          ) : !activity?.length ? (
             <p className="text-sm text-ink-500 rounded-lg border border-dashed border-ink-100 px-3.5 py-4 text-center">
-              No assignment history recorded yet.
+              No activity recorded yet.
             </p>
           ) : (
             <ol className="flex flex-col">
-              {assignmentHistory.map((event, index) => {
-                const isLast = index === assignmentHistory.length - 1;
-                const actionLabel =
-                  event.action === "lost_handoff"
-                    ? "Lost deal routed"
-                    : event.action === "created"
-                      ? "Lead assigned"
-                      : event.action === "unassigned"
-                        ? "Lead unassigned"
-                        : "Lead reassigned";
-                return (
-                  <li key={event.id} className="flex gap-3">
-                    <div className="flex flex-col items-center shrink-0 pt-1.5">
-                      <span
-                        className={`h-2 w-2 rounded-full ${index === 0 ? "bg-primary ring-4 ring-primary/15" : "bg-ink-300"}`}
-                      />
-                      {!isLast && <span className="w-px flex-1 bg-ink-100 my-1" />}
-                    </div>
-                    <div className={`flex-1 min-w-0 ${isLast ? "pb-0" : "pb-4"}`}>
-                      <p className="text-sm font-medium text-ink-800">{actionLabel}</p>
-                      <p className="text-sm text-ink-700 mt-0.5">
-                        {event.previous_assignee_name ?? "Unassigned"} <span className="text-ink-300">→</span>{" "}
-                        {event.new_assignee_name ?? "Unassigned"}
-                      </p>
-                      <p className="text-xs text-ink-500 mt-1">
-                        {formatDateTime(event.created_at)} · {timeAgo(event.created_at)} · by{" "}
-                        {event.assigned_by_name ?? "System"}
-                      </p>
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
-          )}
-        </Section>
-
-        <Section
-          title="Call history"
-          aside={
-            history?.length
-              ? `${history.length} ${history.length === 1 ? "call" : "calls"} · ${formatMinutes(totalTalkTime)} talk time`
-              : undefined
-          }
-        >
-          {isLoading ? (
-            <p className="text-sm text-ink-500">Loading…</p>
-          ) : !history?.length ? (
-            <p className="text-sm text-ink-500 rounded-lg border border-dashed border-ink-100 px-3.5 py-4 text-center">
-              No calls logged yet.
-            </p>
-          ) : (
-            <ol className="flex flex-col">
-              {history.map((call, i) => {
-                const isLatest = i === 0;
-                const isLast = i === history.length - 1;
-                const callbackAt = call.next_follow_up_at ? new Date(call.next_follow_up_at).getTime() : null;
+              {activity.map((event, index) => {
+                const isLatest = index === 0;
+                const isLast = index === activity.length - 1;
+                const ActivityIcon = event.event_type === "call" ? PhoneCall : event.event_type === "assignment" ? UserRound : Activity;
+                const callbackAt = event.next_follow_up_at ? new Date(event.next_follow_up_at).getTime() : null;
                 const callbackStillStands = callbackAt != null && callbackAt === activeCallbackAt;
 
                 return (
-                  <li key={call.id} className="flex gap-3">
-                    {/* timeline rail */}
+                  <li key={`${event.event_type}-${event.id}`} className="flex gap-3">
                     <div className="flex flex-col items-center shrink-0 pt-1.5">
-                      <span
-                        className={`h-2 w-2 rounded-full ${isLatest ? "bg-primary ring-4 ring-primary/15" : "bg-ink-300"}`}
-                      />
+                      <span className={`flex h-6 w-6 items-center justify-center rounded-full ${isLatest ? "bg-primary/10 text-primary ring-4 ring-primary/10" : "bg-ink-50 text-ink-400"}`}>
+                        <ActivityIcon size={13} />
+                      </span>
                       {!isLast && <span className="w-px flex-1 bg-ink-100 my-1" />}
                     </div>
 
                     <div className={`flex-1 min-w-0 ${isLast ? "pb-0" : "pb-4"}`}>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <StatusBadge status={call.outcome} />
-                        {/* A duration on an unanswered call is noise */}
-                        {call.outcome !== "not_picked" && call.duration_minutes > 0 && (
-                          <span className="text-xs text-ink-500">{formatMinutes(call.duration_minutes)} on call</span>
+                        <p className="text-sm font-medium text-ink-800">{event.title}</p>
+                        {event.call_outcome && <StatusBadge status={event.call_outcome} />}
+                        {event.call_outcome !== "not_picked" && event.duration_minutes != null && event.duration_minutes > 0 && (
+                          <span className="text-xs text-ink-500">{formatMinutes(event.duration_minutes)} on call</span>
                         )}
-                        {call.order_value != null && (
+                        {event.order_value != null && (
                           <span className="badge bg-success/10 text-success">
-                            {formatCurrencyFull(call.order_value)}
+                            {formatCurrencyFull(event.order_value)}
                           </span>
                         )}
                         {isLatest && (
@@ -380,20 +349,17 @@ export function LeadDetailModal({
                         )}
                       </div>
 
-                      {/* Absolute time first — two calls minutes apart both read
-                          as "36 minutes ago", which hides their real order */}
                       <p className="text-xs text-ink-500 mt-1">
-                        {formatDateTime(call.created_at)} · {timeAgo(call.created_at)} · by{" "}
-                        {call.logged_by_name ?? "Unknown"}
+                        {formatDateTime(event.occurred_at)} · {timeAgo(event.occurred_at)} · by {event.actor_name ?? "System"}
                       </p>
 
-                      {call.notes && (
+                      {event.body && (
                         <p className="text-sm text-ink-700 mt-1.5 border-l-2 border-ink-100 pl-2.5 whitespace-pre-wrap">
-                          {call.notes}
+                          {event.body}
                         </p>
                       )}
 
-                      {call.next_follow_up_at && (
+                      {event.next_follow_up_at && (
                         <p
                           className={`text-xs mt-1.5 flex items-start gap-1.5 ${
                             callbackStillStands ? "text-warning" : "text-ink-300"
@@ -401,7 +367,7 @@ export function LeadDetailModal({
                         >
                           <CalendarClock size={12} className="shrink-0 mt-0.5" />
                           <span>
-                            Callback set for {formatCallbackTime(call.next_follow_up_at)}
+                            Callback set for {formatCallbackTime(event.next_follow_up_at)}
                             {!callbackStillStands && " — replaced by the call above"}
                           </span>
                         </p>

@@ -11,6 +11,8 @@ import type {
   LeadCategory,
   LeadCategoryOption,
   LeadOut,
+  MergeLeadResult,
+  LeadActivityOut,
   LeadSource,
   LeadStatus,
   BulkDeleteLostDealsResult,
@@ -25,6 +27,11 @@ import type {
   PlatformStats,
   SyncResult,
   TeamMemberOut,
+  PaginatedTasks,
+  TaskOut,
+  TaskPriority,
+  TaskStatus,
+  TaskType,
   UserOut,
   UserRole,
 } from "./types";
@@ -146,6 +153,13 @@ export const leadsApi = {
   remove: (id: string) => apiClient.delete(`/leads/${id}`).then((r) => r.data),
   checkDuplicate: (phone: string) =>
     apiClient.get<DuplicateLeadMatch[]>("/leads/check-duplicate", { params: { phone } }).then((r) => r.data),
+  merge: (primaryLeadId: string, duplicateLeadId: string) =>
+    apiClient
+      .post<MergeLeadResult>("/leads/merge", {
+        primary_lead_id: primaryLeadId,
+        duplicate_lead_id: duplicateLeadId,
+      })
+      .then((r) => r.data),
   categories: () => apiClient.get<LeadCategoryOption[]>("/leads/categories").then((r) => r.data),
   createCategory: (name: string) =>
     apiClient.post<LeadCategoryOption>("/leads/categories", { name }).then((r) => r.data),
@@ -168,6 +182,7 @@ export const callsApi = {
     }
   ) => apiClient.post<CallLogOut>(`/leads/${leadId}/calls`, payload).then((r) => r.data),
   history: (leadId: string) => apiClient.get<CallLogOut[]>(`/leads/${leadId}/calls`).then((r) => r.data),
+  activity: (leadId: string) => apiClient.get<LeadActivityOut[]>(`/leads/${leadId}/activity`).then((r) => r.data),
 };
 
 export interface FollowUpFilters {
@@ -183,6 +198,38 @@ export interface FollowUpFilters {
 export const followUpsApi = {
   list: (filters: FollowUpFilters) =>
     apiClient.get<PaginatedFollowUps>("/follow-ups", { params: filters }).then((r) => r.data),
+};
+
+export const tasksApi = {
+  list: (filters: {
+    status?: TaskStatus;
+    assigned_to?: string;
+    lead_id?: string;
+    date_from?: string;
+    date_to?: string;
+    page?: number;
+    page_size?: number;
+  }) => apiClient.get<PaginatedTasks>("/tasks", { params: filters }).then((r) => r.data),
+  create: (payload: {
+    title: string;
+    description?: string;
+    lead_id?: string;
+    assigned_to?: string;
+    task_type?: TaskType;
+    priority?: TaskPriority;
+    due_at?: string;
+  }) => apiClient.post<TaskOut>("/tasks", payload).then((r) => r.data),
+  update: (id: string, payload: Partial<{
+    title: string;
+    description: string | null;
+    lead_id: string | null;
+    assigned_to: string | null;
+    task_type: TaskType;
+    priority: TaskPriority;
+    status: TaskStatus;
+    due_at: string | null;
+  }>) => apiClient.patch<TaskOut>(`/tasks/${id}`, payload).then((r) => r.data),
+  remove: (id: string) => apiClient.delete(`/tasks/${id}`).then((r) => r.data),
 };
 
 export interface LostDealFilters {

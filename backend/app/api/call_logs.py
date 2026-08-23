@@ -10,7 +10,9 @@ from app.core.database import get_db
 from app.core.deps import CurrentUser, require_org_user
 from app.models.call_log import CallLog
 from app.models.lead import Lead, LeadStatus
+from app.models.lead_assignment import LeadAssignmentHistory
 from app.models.user import UserRole
+from app.schemas.activity import LeadActivityOut
 from app.schemas.call_log import CallLogCreate, CallLogOut, FollowUpOut, PaginatedFollowUps
 
 router = APIRouter(prefix="/leads", tags=["calls"])
@@ -81,6 +83,105 @@ async def get_call_history(
     )
     calls = result.scalars().all()
     return [_to_out(c) for c in calls]
+
+
+@router.get("/{lead_id}/activity", response_model=list[LeadActivityOut])
+async def get_lead_activity(
+    lead_id: uuid.UUID,
+    current: CurrentUser = Depends(require_org_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return calls, ownership changes, and creation as one chronological feed."""
+    lead_result = await db.execute(
+        select(Lead).where(Lead.id == lead_id, Lead.organization_id == current.organization_id)
+    )
+    lead = lead_result.scalar_one_or_none()
+    if lead is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Lead not found")
+    if current.role == UserRole.telecaller and lead.assigned_to != current.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Not your lead")
+
+    calls_result = await db.execute(
+        select(CallLog)
+        .options(*CALL_LOAD_OPTIONS)
+        .where(CallLog.lead_id == lead_id)
+        .order_by(CallLog.created_at.desc())
+    )
+    assignments_result = await db.execute(
+        select(LeadAssignmentHistory)
+        .options(
+            selectinload(LeadAssignmentHistory.previous_assignee),
+            selectinload(LeadAssignmentHistory.new_assignee),
+            selectinload(LeadAssignmentHistory.assigned_by),
+        )
+        .where(
+            LeadAssignmentHistory.lead_id == lead_id,
+            LeadAssignmentHistory.organization_id == current.organization_id,
+        )
+        .order_by(LeadAssignmentHistory.created_at.desc())
+    )
+
+    call_titles = {
+        LeadStatus.new: "Call logged",
+        LeadStatus.follow_up: "Follow-up logged",
+        LeadStatus.not_picked: "No answer logged",
+        LeadStatus.converted: "Lead converted",
+        LeadStatus.lost: "Lead marked as lost",
+    }
+    assignment_titles = {
+        "created": "Lead assigned",
+        "auto_assigned": "Lead auto-assigned",
+        "lost_handoff": "Lost deal routed",
+        "unassigned": "Lead unassigned",
+    }
+
+    events: list[LeadActivityOut] = [
+        LeadActivityOut(
+            id=lead.id,
+            lead_id=lead.id,
+            event_type="created",
+            occurred_at=lead.created_at,
+            title="Lead added",
+            body=f"Added from {lead.source.value.replace('_', ' ').title()}.",
+            source=lead.source.value,
+        )
+    ]
+    events.extend(
+        LeadActivityOut(
+            id=call.id,
+            lead_id=lead.id,
+            event_type="call",
+            occurred_at=call.created_at,
+            actor_id=call.logged_by,
+            actor_name=call.logger.name if call.logger else None,
+            title=call_titles.get(call.outcome, "Call logged"),
+            body=call.notes,
+            call_outcome=call.outcome,
+            duration_minutes=float(call.duration_minutes),
+            order_value=float(call.order_value) if call.order_value is not None else None,
+            next_follow_up_at=call.next_follow_up_at,
+        )
+        for call in calls_result.scalars().all()
+    )
+    events.extend(
+        LeadActivityOut(
+            id=event.id,
+            lead_id=lead.id,
+            event_type="assignment",
+            occurred_at=event.created_at,
+            actor_id=event.assigned_by_id,
+            actor_name=event.assigned_by.name if event.assigned_by else None,
+            title=assignment_titles.get(event.action, "Lead reassigned"),
+            body=f"{event.previous_assignee.name if event.previous_assignee else 'Unassigned'} → "
+            f"{event.new_assignee.name if event.new_assignee else 'Unassigned'}",
+            source=event.source,
+            assignment_action=event.action,
+            previous_assignee_name=event.previous_assignee.name if event.previous_assignee else None,
+            new_assignee_name=event.new_assignee.name if event.new_assignee else None,
+        )
+        for event in assignments_result.scalars().all()
+    )
+    return sorted(events, key=lambda event: event.occurred_at, reverse=True)
 
 
 @followups_router.get("", response_model=PaginatedFollowUps)

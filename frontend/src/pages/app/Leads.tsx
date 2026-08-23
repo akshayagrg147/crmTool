@@ -21,6 +21,8 @@ import {
   ArchiveX,
   Tags,
   Shuffle,
+  GitMerge,
+  Bookmark,
 } from "lucide-react";
 import { leadsApi, usersApi } from "@/api/endpoints";
 import { useAuth } from "@/hooks/useAuth";
@@ -38,6 +40,8 @@ import { EditLeadModal } from "@/components/leads/EditLeadModal";
 import { MarkLostModal } from "@/components/leads/MarkLostModal";
 import { CategoryManagerModal } from "@/components/leads/CategoryManagerModal";
 import { ChangeCategoryModal } from "@/components/leads/ChangeCategoryModal";
+import { MergeLeadModal } from "@/components/leads/MergeLeadModal";
+import { SaveLeadViewModal, type SavedLeadView } from "@/components/leads/SaveLeadViewModal";
 import { formatCallbackTime, formatDate, formatDateTime, initials, whatsappLink } from "@/lib/format";
 import type { LeadCategory, LeadOut, LeadSource, LeadStatus } from "@/api/types";
 
@@ -62,6 +66,8 @@ export function LeadsPage() {
   const [pageSize, setPageSize] = useState<PageSize>(50);
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
   const [bulkAssigneeId, setBulkAssigneeId] = useState("");
+  const [savedViews, setSavedViews] = useState<SavedLeadView[]>([]);
+  const [showSaveView, setShowSaveView] = useState(false);
 
   const [showAdd, setShowAdd] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
@@ -76,8 +82,35 @@ export function LeadsPage() {
   const [deleteTarget, setDeleteTarget] = useState<LeadOut | null>(null);
   const [lostLead, setLostLead] = useState<LeadOut | null>(null);
   const [menuLead, setMenuLead] = useState<LeadOut | null>(null);
+  const [mergeLead, setMergeLead] = useState<LeadOut | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const [exporting, setExporting] = useState(false);
+
+  const savedViewsKey = `talkocrm_saved_lead_views:${user?.organization_id ?? "workspace"}`;
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(savedViewsKey);
+      setSavedViews(stored ? (JSON.parse(stored) as SavedLeadView[]) : []);
+    } catch {
+      setSavedViews([]);
+    }
+  }, [savedViewsKey]);
+
+  function persistSavedViews(next: SavedLeadView[]) {
+    setSavedViews(next);
+    localStorage.setItem(savedViewsKey, JSON.stringify(next));
+  }
+
+  function applySavedView(view: SavedLeadView) {
+    setSearch(view.filters.q);
+    setSourceFilter(view.filters.source as LeadSource | "");
+    setStatusFilter(view.filters.status as LeadStatus | "");
+    setAssigneeFilter(view.filters.assignee);
+    setCategoryFilter(view.filters.category);
+    setCityFilter(view.filters.city);
+    setCallbackFilter(view.filters.callback as "" | "scheduled" | "overdue");
+    setPage(1);
+  }
 
   useEffect(() => {
     const assigneeFromUrl = searchParams.get("assignee") ?? "";
@@ -370,6 +403,23 @@ export function LeadsPage() {
           <option value="scheduled">Scheduled Callbacks (soonest first)</option>
           <option value="overdue">Overdue Callbacks</option>
         </select>
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          <select
+            className="input min-w-0 flex-1 py-2 sm:w-48 sm:flex-none"
+            aria-label="Saved lead views"
+            value=""
+            onChange={(event) => {
+              const view = savedViews.find((item) => item.id === event.target.value);
+              if (view) applySavedView(view);
+            }}
+          >
+            <option value="">Saved views</option>
+            {savedViews.map((view) => <option key={view.id} value={view.id}>{view.name}</option>)}
+          </select>
+          <button className="btn-secondary shrink-0 px-3 py-2 text-sm" aria-label="Save current lead view" onClick={() => setShowSaveView(true)}>
+            <Bookmark size={15} /> <span className="hidden sm:inline">Save view</span>
+          </button>
+        </div>
       </div>
 
       {canManage && selectedLeadIds.length > 0 && (
@@ -703,6 +753,30 @@ export function LeadsPage() {
         }}
       />
       <EditLeadModal open={!!editLead} onClose={() => setEditLead(null)} lead={editLead} />
+      <MergeLeadModal lead={mergeLead} onClose={() => setMergeLead(null)} />
+      <SaveLeadViewModal
+        open={showSaveView}
+        onClose={() => setShowSaveView(false)}
+        views={savedViews}
+        onSave={(name) => {
+          const view: SavedLeadView = {
+            id: crypto.randomUUID(),
+            name,
+            filters: {
+              q: search,
+              source: sourceFilter,
+              status: statusFilter,
+              assignee: assigneeFilter,
+              category: categoryFilter,
+              city: cityFilter,
+              callback: callbackFilter,
+            },
+          };
+          persistSavedViews([...savedViews, view]);
+          toast(`Saved view “${name}”`, "success");
+        }}
+        onDelete={(id) => persistSavedViews(savedViews.filter((view) => view.id !== id))}
+      />
       <ChangeCategoryModal open={!!categoryLead} onClose={() => setCategoryLead(null)} lead={categoryLead} />
       <MarkLostModal
         open={!!lostLead}
@@ -740,6 +814,10 @@ export function LeadsPage() {
         }}
         onDelete={() => {
           setDeleteTarget(menuLead);
+          setMenuLead(null);
+        }}
+        onMerge={() => {
+          setMergeLead(menuLead);
           setMenuLead(null);
         }}
       />
@@ -789,6 +867,7 @@ function LeadActionsMenu({
   onQuickOutcome,
   onEdit,
   onDelete,
+  onMerge,
 }: {
   open: boolean;
   anchorEl: HTMLElement | null;
@@ -804,6 +883,7 @@ function LeadActionsMenu({
   onQuickOutcome: (outcome: LeadStatus) => void;
   onEdit: () => void;
   onDelete: () => void;
+  onMerge: () => void;
 }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -848,6 +928,9 @@ function LeadActionsMenu({
           <div className="h-px bg-ink-100 my-1" />
           <button className={itemClass} onClick={onEdit}>
             <Pencil size={15} /> Edit Lead
+          </button>
+          <button className={itemClass} onClick={onMerge}>
+            <GitMerge size={15} className="text-primary" /> Merge duplicate
           </button>
           <div className="h-px bg-ink-100 my-1" />
           <p className="px-3 pt-1 pb-1 text-xs font-medium text-ink-500">

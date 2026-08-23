@@ -78,6 +78,8 @@ class LeadOut(BaseModel):
     credit_limit: float | None
     outstanding_amount: float | None
     dnd: bool
+    score: int = 0
+    score_band: Literal["hot", "warm", "cool"] = "cool"
 
 
 class AssignmentHistoryOut(BaseModel):
@@ -139,6 +141,16 @@ class DuplicateLeadMatch(BaseModel):
 
 class ReassignRequest(BaseModel):
     assigned_to: uuid.UUID | None
+
+
+class MergeLeadRequest(BaseModel):
+    primary_lead_id: uuid.UUID
+    duplicate_lead_id: uuid.UUID
+
+
+class MergeLeadResult(BaseModel):
+    lead: LeadOut
+    merged_lead_id: uuid.UUID
 
 
 class BulkReassignRequest(BaseModel):
