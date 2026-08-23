@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Modal } from "@/components/Modal";
 import { useToast } from "@/hooks/useToast";
-import { leadsApi } from "@/api/endpoints";
+import { leadsApi, workspaceApi } from "@/api/endpoints";
 import { INDIAN_STATES } from "@/lib/indianStates";
-import type { LeadCategory, LeadOut, LeadSource } from "@/api/types";
+import type { CustomFieldDefinition, LeadCategory, LeadOut, LeadSource } from "@/api/types";
 
 const SOURCES: { value: LeadSource; label: string }[] = [
   { value: "manual", label: "Manual" },
@@ -39,6 +39,8 @@ function toForm(lead: LeadOut) {
     credit_limit: lead.credit_limit != null ? String(lead.credit_limit) : "",
     outstanding_amount: lead.outstanding_amount != null ? String(lead.outstanding_amount) : "",
     dnd: lead.dnd,
+    stage_key: lead.stage_key ?? "new",
+    custom_fields: { ...(lead.custom_fields ?? {}) },
   };
 }
 
@@ -52,6 +54,8 @@ export function EditLeadModal({ open, onClose, lead }: { open: boolean; onClose:
     enabled: open,
   });
   const categoryOptions = categories ?? CATEGORIES;
+  const { data: stages = [] } = useQuery({ queryKey: ["workspace-stages"], queryFn: workspaceApi.stages, enabled: open });
+  const { data: customFields = [] } = useQuery({ queryKey: ["workspace-custom-fields"], queryFn: workspaceApi.customFields, enabled: open });
 
   useEffect(() => {
     if (open && lead) setForm(toForm(lead));
@@ -75,6 +79,8 @@ export function EditLeadModal({ open, onClose, lead }: { open: boolean; onClose:
         credit_limit: form.credit_limit ? Number(form.credit_limit) : null,
         outstanding_amount: form.outstanding_amount ? Number(form.outstanding_amount) : null,
         dnd: form.dnd,
+        stage_key: form.stage_key,
+        custom_fields: form.custom_fields,
       });
     },
     onSuccess: () => {
@@ -103,7 +109,7 @@ export function EditLeadModal({ open, onClose, lead }: { open: boolean; onClose:
           </button>
           <button
             className="btn-primary"
-            disabled={!form.name || !form.phone || !form.interested_categories.length || mutation.isPending}
+            disabled={!form.name || !form.phone || !form.interested_categories.length || customFields.some((field) => field.required && !String(form.custom_fields[field.key] ?? "").trim()) || mutation.isPending}
             onClick={() => mutation.mutate()}
           >
             {mutation.isPending ? "Saving..." : "Save Changes"}
@@ -136,6 +142,26 @@ export function EditLeadModal({ open, onClose, lead }: { open: boolean; onClose:
             ))}
           </select>
         </div>
+
+        <div className="sm:col-span-2 border-t border-ink-100 pt-4">
+          <p className="section-label">Pipeline and qualification</p>
+        </div>
+        <div>
+          <label htmlFor="edit-lead-stage" className="text-xs font-medium text-ink-500 mb-1.5 block">Pipeline stage</label>
+          <select id="edit-lead-stage" className="input" value={form.stage_key} onChange={(event) => setForm({ ...form, stage_key: event.target.value })}>
+            {(stages.length ? stages : [{ key: "new", name: "New" } as const]).map((stage) => <option key={stage.key} value={stage.key}>{stage.name}</option>)}
+          </select>
+        </div>
+        {customFields.map((field: CustomFieldDefinition) => {
+          const value = form.custom_fields[field.key];
+          const setValue = (next: unknown) => setForm({ ...form, custom_fields: { ...form.custom_fields, [field.key]: next } });
+          return <div key={field.id}>
+            <label className="text-xs font-medium text-ink-500 mb-1.5 block">{field.label}{field.required && <span className="text-danger"> *</span>}</label>
+            {field.field_type === "boolean" ? <label className="flex h-10 items-center gap-2 text-sm text-ink-700"><input type="checkbox" className="h-4 w-4 accent-primary" checked={Boolean(value)} onChange={(event) => setValue(event.target.checked)} /> Yes</label>
+              : field.field_type === "select" ? <select className="input" value={String(value ?? "")} onChange={(event) => setValue(event.target.value)}><option value="">Select {field.label}</option>{(field.options ?? []).map((option) => <option key={String(option)} value={String(option)}>{String(option)}</option>)}</select>
+              : <input className="input" type={field.field_type === "number" ? "number" : field.field_type === "date" ? "date" : "text"} value={String(value ?? "")} onChange={(event) => setValue(event.target.value)} />}
+          </div>;
+        })}
 
         <div className="sm:col-span-2 border-t border-ink-100 pt-4"><p className="section-label">Interests and qualification</p></div>
         <div className="sm:col-span-2">

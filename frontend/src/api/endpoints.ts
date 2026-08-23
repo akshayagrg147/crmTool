@@ -32,6 +32,15 @@ import type {
   TaskPriority,
   TaskStatus,
   TaskType,
+  CustomFieldDefinition,
+  PipelineStage,
+  AutomationRule,
+  AuditEvent,
+  PaginatedAuditEvents,
+  SavedReport,
+  BackupRecord,
+  LeadNoteOut,
+  LeadAttachmentOut,
   UserOut,
   UserRole,
 } from "./types";
@@ -42,12 +51,13 @@ export interface TokenPair {
 }
 
 export const authApi = {
-  login: (phone: string, password: string, countryCode?: string) =>
+  login: (phone: string, password: string, countryCode?: string, otp?: string) =>
     apiClient
       .post<{ tokens: TokenPair; user: UserOut; organization_name: string | null }>("/auth/login", {
         phone,
         password,
         country_code: countryCode,
+        otp,
       })
       .then((r) => r.data),
   me: () => apiClient.get<UserOut>("/auth/me").then((r) => r.data),
@@ -123,6 +133,8 @@ export interface LeadCreatePayload {
   credit_limit?: number | null;
   outstanding_amount?: number | null;
   dnd?: boolean;
+  stage_key?: string;
+  custom_fields?: Record<string, unknown>;
 }
 
 export const leadsApi = {
@@ -183,6 +195,48 @@ export const callsApi = {
   ) => apiClient.post<CallLogOut>(`/leads/${leadId}/calls`, payload).then((r) => r.data),
   history: (leadId: string) => apiClient.get<CallLogOut[]>(`/leads/${leadId}/calls`).then((r) => r.data),
   activity: (leadId: string) => apiClient.get<LeadActivityOut[]>(`/leads/${leadId}/activity`).then((r) => r.data),
+};
+
+export const workspaceApi = {
+  customFields: () => apiClient.get<CustomFieldDefinition[]>("/workspace/custom-fields").then((r) => r.data),
+  createCustomField: (payload: Omit<CustomFieldDefinition, "id" | "organization_id" | "created_at">) => apiClient.post<CustomFieldDefinition>("/workspace/custom-fields", payload).then((r) => r.data),
+  updateCustomField: (id: string, payload: Partial<CustomFieldDefinition>) => apiClient.patch<CustomFieldDefinition>(`/workspace/custom-fields/${id}`, payload).then((r) => r.data),
+  deleteCustomField: (id: string) => apiClient.delete(`/workspace/custom-fields/${id}`).then((r) => r.data),
+  stages: () => apiClient.get<PipelineStage[]>("/workspace/stages").then((r) => r.data),
+  createStage: (payload: Omit<PipelineStage, "id" | "organization_id" | "created_at">) => apiClient.post<PipelineStage>("/workspace/stages", payload).then((r) => r.data),
+  updateStage: (id: string, payload: Partial<PipelineStage>) => apiClient.patch<PipelineStage>(`/workspace/stages/${id}`, payload).then((r) => r.data),
+  deleteStage: (id: string) => apiClient.delete(`/workspace/stages/${id}`).then((r) => r.data),
+  automations: () => apiClient.get<AutomationRule[]>("/workspace/automations").then((r) => r.data),
+  createAutomation: (payload: Omit<AutomationRule, "id" | "organization_id" | "created_by" | "created_at" | "updated_at">) => apiClient.post<AutomationRule>("/workspace/automations", payload).then((r) => r.data),
+  updateAutomation: (id: string, payload: Partial<AutomationRule>) => apiClient.patch<AutomationRule>(`/workspace/automations/${id}`, payload).then((r) => r.data),
+  deleteAutomation: (id: string) => apiClient.delete(`/workspace/automations/${id}`).then((r) => r.data),
+  audit: (params: { page?: number; page_size?: number; entity_type?: string }) => apiClient.get<PaginatedAuditEvents>("/workspace/audit", { params }).then((r) => r.data),
+  auditExport: () => apiClient.get<Blob>("/workspace/audit/export", { responseType: "blob" }).then((r) => r.data),
+  reports: () => apiClient.get<SavedReport[]>("/workspace/reports").then((r) => r.data),
+  createReport: (payload: { name: string; report_type: "leads" | "analytics"; filters: Record<string, unknown> }) => apiClient.post<SavedReport>("/workspace/reports", payload).then((r) => r.data),
+  deleteReport: (id: string) => apiClient.delete(`/workspace/reports/${id}`).then((r) => r.data),
+  backups: () => apiClient.get<BackupRecord[]>("/workspace/backups").then((r) => r.data),
+  createBackup: () => apiClient.post<BackupRecord>("/workspace/backups").then((r) => r.data),
+  downloadBackup: (id: string) => apiClient.get<Blob>(`/workspace/backups/${id}/download`, { responseType: "blob" }).then((r) => r.data),
+  exportWorkspace: () => apiClient.get<Blob>("/workspace/export", { responseType: "blob" }).then((r) => r.data),
+};
+
+export const notesApi = {
+  list: (leadId: string) => apiClient.get<LeadNoteOut[]>(`/leads/${leadId}/notes`).then((r) => r.data),
+  create: (leadId: string, payload: { body: string; pinned?: boolean }) => apiClient.post<LeadNoteOut>(`/leads/${leadId}/notes`, payload).then((r) => r.data),
+  update: (leadId: string, noteId: string, payload: { body?: string; pinned?: boolean }) => apiClient.patch<LeadNoteOut>(`/leads/${leadId}/notes/${noteId}`, payload).then((r) => r.data),
+  remove: (leadId: string, noteId: string) => apiClient.delete(`/leads/${leadId}/notes/${noteId}`).then((r) => r.data),
+  attachments: (leadId: string) => apiClient.get<LeadAttachmentOut[]>(`/leads/${leadId}/attachments`).then((r) => r.data),
+  upload: (leadId: string, file: File) => { const form = new FormData(); form.append("file", file); return apiClient.post<LeadAttachmentOut>(`/leads/${leadId}/attachments`, form, { headers: { "Content-Type": "multipart/form-data" } }).then((r) => r.data); },
+  download: (leadId: string, attachmentId: string) => apiClient.get<Blob>(`/leads/${leadId}/attachments/${attachmentId}/download`, { responseType: "blob" }).then((r) => r.data),
+  removeAttachment: (leadId: string, attachmentId: string) => apiClient.delete(`/leads/${leadId}/attachments/${attachmentId}`).then((r) => r.data),
+};
+
+export const securityApi = {
+  twoFactorStatus: () => apiClient.get<{ enabled: boolean }>("/security/2fa").then((r) => r.data),
+  twoFactorSetup: () => apiClient.post<{ secret: string; otpauth_url: string }>("/security/2fa/setup").then((r) => r.data),
+  twoFactorEnable: (code: string) => apiClient.post<{ enabled: boolean }>("/security/2fa/enable", null, { params: { code } }).then((r) => r.data),
+  twoFactorDisable: (code: string) => apiClient.post<{ enabled: boolean }>("/security/2fa/disable", null, { params: { code } }).then((r) => r.data),
 };
 
 export interface FollowUpFilters {

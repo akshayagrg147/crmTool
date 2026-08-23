@@ -7,6 +7,12 @@ from app.models.distribution_settings import DistributionSettings
 from app.models.integration import LeadIntegration
 from app.models.lead_assignment import LeadAssignmentHistory
 from app.models.task import Task
+from app.models.custom_field import CustomFieldDefinition, PipelineStage
+from app.models.automation import AutomationRule
+from app.models.audit import AuditEvent
+from app.models.lead_note import LeadAttachment, LeadNote
+from app.models.saved_report import SavedReport
+from app.models.backup import BackupRecord
 
 __all__ = [
     "Organization",
@@ -18,4 +24,12 @@ __all__ = [
     "LeadIntegration",
     "LeadAssignmentHistory",
     "Task",
+    "CustomFieldDefinition",
+    "PipelineStage",
+    "AutomationRule",
+    "AuditEvent",
+    "LeadNote",
+    "LeadAttachment",
+    "SavedReport",
+    "BackupRecord",
 ]

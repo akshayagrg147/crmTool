@@ -1,21 +1,24 @@
-import { type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { type ReactNode, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Activity,
   CalendarClock,
   CheckCircle2,
   IndianRupee,
+  Paperclip,
   MessageCircle,
   Pencil,
   Phone,
   PhoneCall,
+  Send,
   ShieldAlert,
+  Trash2,
   UserRound,
   XCircle,
 } from "lucide-react";
 import { Modal } from "@/components/Modal";
-import { callsApi } from "@/api/endpoints";
+import { callsApi, notesApi } from "@/api/endpoints";
 import { StatusBadge, SourceBadge, CategoryBadge, DndBadge } from "@/components/StatusBadge";
 import {
   formatCallbackTime,
@@ -110,11 +113,21 @@ export function LeadDetailModal({
   onEdit?: () => void;
   onLogCall?: () => void;
 }) {
+  const queryClient = useQueryClient();
+  const [noteBody, setNoteBody] = useState("");
+  const [attachmentUploading, setAttachmentUploading] = useState(false);
   const { data: activity, isLoading: activityLoading } = useQuery({
     queryKey: ["lead-activity", lead?.id],
     queryFn: () => callsApi.activity(lead!.id),
     enabled: open && !!lead,
   });
+  const { data: notes = [] } = useQuery({ queryKey: ["lead-notes", lead?.id], queryFn: () => notesApi.list(lead!.id), enabled: open && !!lead });
+  const { data: attachments = [] } = useQuery({ queryKey: ["lead-attachments", lead?.id], queryFn: () => notesApi.attachments(lead!.id), enabled: open && !!lead });
+  const noteMutation = useMutation({ mutationFn: () => notesApi.create(lead!.id, { body: noteBody.trim() }), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["lead-notes", lead?.id] }); queryClient.invalidateQueries({ queryKey: ["lead-activity", lead?.id] }); setNoteBody(""); }, });
+  const attachmentMutation = useMutation({ mutationFn: (file: File) => notesApi.upload(lead!.id, file), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["lead-attachments", lead?.id] }); queryClient.invalidateQueries({ queryKey: ["lead-activity", lead?.id] }); }, });
+  const attachmentDownloadMutation = useMutation({ mutationFn: (attachmentId: string) => notesApi.download(lead!.id, attachmentId), onSuccess: (blob, attachmentId) => { const attachment = attachments.find((item) => item.id === attachmentId); const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = attachment?.filename ?? "attachment"; anchor.click(); URL.revokeObjectURL(url); } });
+  const noteDeleteMutation = useMutation({ mutationFn: (noteId: string) => notesApi.remove(lead!.id, noteId), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["lead-notes", lead?.id] }); queryClient.invalidateQueries({ queryKey: ["lead-activity", lead?.id] }); } });
+  const attachmentDeleteMutation = useMutation({ mutationFn: (attachmentId: string) => notesApi.removeAttachment(lead!.id, attachmentId), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["lead-attachments", lead?.id] }); queryClient.invalidateQueries({ queryKey: ["lead-activity", lead?.id] }); } });
 
   if (!lead) return null;
 
@@ -299,6 +312,36 @@ export function LeadDetailModal({
             </p>
           </Section>
         )}
+
+        <Section title="Team notes" aside={notes.length ? `${notes.length} ${notes.length === 1 ? "note" : "notes"}` : undefined}>
+          <div className="space-y-2.5">
+            {notes.map((note) => (
+              <div key={note.id} className={`rounded-lg border px-3.5 py-2.5 ${note.pinned ? "border-accent/30 bg-accent/5" : "border-ink-100 bg-ink-50"}`}>
+                <div className="flex items-start gap-2"><p className="min-w-0 flex-1 whitespace-pre-wrap text-sm text-ink-800">{note.body}</p><button className="btn-icon text-danger" aria-label="Delete team note" onClick={() => noteDeleteMutation.mutate(note.id)}><Trash2 size={13} /></button></div>
+                <p className="mt-1.5 text-xs text-ink-500">{note.author_name ?? "System"} · {formatDateTime(note.created_at)}{note.pinned ? " · pinned" : ""}</p>
+              </div>
+            ))}
+            <div className="flex items-end gap-2">
+              <textarea className="input min-h-20 flex-1 resize-y" aria-label="Add team note" placeholder="Add context for your team…" value={noteBody} onChange={(event) => setNoteBody(event.target.value)} />
+              <button className="btn-primary h-10 shrink-0 px-3" aria-label="Add team note" disabled={!noteBody.trim() || noteMutation.isPending} onClick={() => noteMutation.mutate()}><Send size={15} /></button>
+            </div>
+          </div>
+        </Section>
+
+        <Section title="Attachments" aside={attachments.length ? `${attachments.length} files` : undefined}>
+          <div className="space-y-2">
+            {attachments.map((attachment) => (
+              <div key={attachment.id} className="flex items-center gap-2 rounded-lg border border-ink-100 px-3 py-2">
+                <button className="flex min-w-0 flex-1 items-center gap-2 text-left hover:text-primary" onClick={() => attachmentDownloadMutation.mutate(attachment.id)}><Paperclip size={14} className="shrink-0 text-primary" /><span className="min-w-0 flex-1 truncate text-sm text-ink-800">{attachment.filename}</span><span className="text-xs text-ink-500">{Math.max(1, Math.round(attachment.size_bytes / 1024))} KB</span></button>
+                <button className="btn-icon text-danger" aria-label={`Delete ${attachment.filename}`} onClick={() => attachmentDeleteMutation.mutate(attachment.id)}><Trash2 size={13} /></button>
+              </div>
+            ))}
+            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-ink-200 px-3 py-3 text-sm text-ink-600 hover:border-primary hover:bg-primary-soft/30">
+              <Paperclip size={15} /> {attachmentUploading ? "Uploading…" : "Attach a file"}
+              <input type="file" className="sr-only" disabled={attachmentUploading} onChange={async (event) => { const file = event.target.files?.[0]; if (!file) return; setAttachmentUploading(true); try { await attachmentMutation.mutateAsync(file); } finally { setAttachmentUploading(false); event.target.value = ""; } }} />
+            </label>
+          </div>
+        </Section>
 
         <Section
           title="Activity timeline"

@@ -39,6 +39,8 @@ export function LoginPage() {
   const [countryCode, setCountryCode] = useState(DEFAULT_LOGIN_COUNTRY.code);
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
+  const [otp, setOtp] = useState("");
+  const [requiresOtp, setRequiresOtp] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [shakeKey, setShakeKey] = useState(0);
@@ -51,12 +53,14 @@ export function LoginPage() {
     setLoading(true);
     try {
       const country = LOGIN_COUNTRIES.find((item) => item.code === countryCode) ?? DEFAULT_LOGIN_COUNTRY;
-      const user = await login(phone, password, country.dialCode);
+      const user = await login(phone, password, country.dialCode, otp || undefined);
       if (user.role === "super_admin") navigate("/super-admin");
       else if (user.role === "telecaller") navigate("/leads");
       else navigate("/dashboard");
     } catch (err: any) {
-      setError(err?.response?.data?.detail ?? "Something went wrong. Please try again.");
+      const detail = err?.response?.data?.detail;
+      if (detail?.code === "two_factor_required") setRequiresOtp(true);
+      setError(typeof detail === "string" ? detail : detail?.message ?? "Something went wrong. Please try again.");
       setShakeKey((key) => key + 1);
     } finally {
       setLoading(false);
@@ -203,6 +207,25 @@ export function LoginPage() {
               </div>
               <p className="mt-1.5 text-[11px] text-ink-500">Use the number registered with your organization.</p>
             </div>
+
+            {requiresOtp && (
+              <div className="mt-5">
+                <label htmlFor="login-otp" className="mb-2 block text-xs font-semibold text-ink-700">Authenticator code</label>
+                <input
+                  id="login-otp"
+                  name="otp"
+                  className="input min-h-11 w-full tracking-[0.35em]"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  required
+                  value={otp}
+                  onChange={(e) => { setOtp(e.target.value.replace(/\D/g, "")); if (error) setError(null); }}
+                  placeholder="000000"
+                />
+                <p className="mt-1.5 text-[11px] text-ink-500">Enter the six-digit code from your authenticator app.</p>
+              </div>
+            )}
 
             <div className="mt-5">
               <label htmlFor="login-password" className="mb-2 block text-xs font-semibold text-ink-700">

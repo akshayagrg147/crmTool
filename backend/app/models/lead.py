@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import ARRAY, Boolean, DateTime, ForeignKey, Numeric, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -74,6 +75,8 @@ class Lead(Base):
     credit_limit: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
     outstanding_amount: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
     dnd: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    stage_key: Mapped[str] = mapped_column(String(80), nullable=False, default="new", server_default="new", index=True)
+    custom_fields: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
 
     organization = relationship("Organization", back_populates="leads")
     assignee = relationship("User", back_populates="assigned_leads", foreign_keys=[assigned_to])

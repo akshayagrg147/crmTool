@@ -11,9 +11,12 @@ from app.api import (
     leads,
     lost_deals,
     organization,
+    notes,
+    security,
     super_admin,
     tasks,
     users,
+    workspace,
 )
 from app.core.config import settings
 from app.core.limiter import limiter
@@ -44,6 +47,9 @@ app.include_router(organization.router, prefix="/api")
 app.include_router(integrations.router, prefix="/api")
 app.include_router(integrations.webhook_router, prefix="/api")
 app.include_router(tasks.router, prefix="/api")
+app.include_router(notes.router, prefix="/api")
+app.include_router(security.router, prefix="/api")
+app.include_router(workspace.router, prefix="/api")
 
 
 @app.on_event("startup")

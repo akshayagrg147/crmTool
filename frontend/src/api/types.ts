@@ -129,6 +129,8 @@ export interface LeadOut {
   dnd: boolean;
   score: number;
   score_band: "hot" | "warm" | "cool";
+  stage_key: string;
+  custom_fields: Record<string, unknown>;
 }
 
 export interface BulkReassignResult {
@@ -156,7 +158,7 @@ export interface AssignmentHistoryOut {
 export interface LeadActivityOut {
   id: string;
   lead_id: string;
-  event_type: "created" | "call" | "assignment";
+  event_type: "created" | "call" | "assignment" | "note" | "task";
   occurred_at: string;
   actor_id: string | null;
   actor_name: string | null;
@@ -278,6 +280,96 @@ export interface PaginatedTasks {
   total: number;
   page: number;
   page_size: number;
+}
+
+export type CustomFieldType = "text" | "number" | "boolean" | "date" | "select";
+export interface CustomFieldDefinition {
+  id: string;
+  organization_id: string;
+  key: string;
+  label: string;
+  field_type: CustomFieldType;
+  options: string[];
+  required: boolean;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+}
+export interface PipelineStage {
+  id: string;
+  organization_id: string;
+  key: string;
+  name: string;
+  color: string;
+  sort_order: number;
+  is_closed: boolean;
+  is_won: boolean;
+  created_at: string;
+}
+export type AutomationTrigger = "lead_created" | "lead_assigned" | "status_changed" | "callback_due" | "task_completed";
+export type AutomationAction = "create_task" | "add_note" | "assign_manager";
+export interface AutomationRule {
+  id: string;
+  organization_id: string;
+  name: string;
+  trigger: AutomationTrigger;
+  action: AutomationAction;
+  conditions: Record<string, unknown>;
+  action_config: Record<string, unknown>;
+  is_active: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+export interface AuditEvent {
+  id: string;
+  organization_id: string | null;
+  actor_id: string | null;
+  actor_name: string | null;
+  entity_type: string;
+  entity_id: string | null;
+  action: string;
+  summary: string;
+  payload: Record<string, unknown>;
+  created_at: string;
+}
+export interface PaginatedAuditEvents { items: AuditEvent[]; total: number; page: number; page_size: number; }
+export interface SavedReport {
+  id: string;
+  organization_id: string;
+  created_by: string | null;
+  name: string;
+  report_type: "leads" | "analytics";
+  filters: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+export interface BackupRecord {
+  id: string;
+  created_at: string;
+  filename: string;
+  size_bytes: number;
+  status: "ready" | "failed";
+}
+export interface LeadNoteOut {
+  id: string;
+  lead_id: string;
+  author_id: string | null;
+  author_name: string | null;
+  body: string;
+  pinned: boolean;
+  created_at: string;
+  updated_at: string;
+}
+export interface LeadAttachmentOut {
+  id: string;
+  lead_id: string;
+  uploaded_by: string | null;
+  uploaded_by_name: string | null;
+  filename: string;
+  content_type: string | null;
+  size_bytes: number;
+  created_at: string;
 }
 
 export interface DashboardKPIs {

@@ -33,6 +33,8 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     state: Mapped[str | None] = mapped_column(String(100), nullable=True)
     city: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    two_factor_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    two_factor_secret: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     organization = relationship("Organization", back_populates="users")
     assigned_leads = relationship("Lead", back_populates="assignee", foreign_keys="Lead.assigned_to")

@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     public_base_url: str = "http://localhost:8000"
     # How often the background poller pulls from pull-based providers.
     integration_poll_interval_seconds: int = 300
+    backup_dir: str = "./data/backups"
+    attachment_dir: str = "./data/attachments"
+    max_attachment_size_bytes: int = 10 * 1024 * 1024
 
     @property
     def cors_origin_list(self) -> list[str]:

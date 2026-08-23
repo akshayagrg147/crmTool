@@ -21,6 +21,8 @@ class LeadCreate(BaseModel):
     credit_limit: float | None = None
     outstanding_amount: float | None = None
     dnd: bool = False
+    stage_key: str | None = Field(default=None, min_length=1, max_length=80)
+    custom_fields: dict = Field(default_factory=dict)
 
 
 class LeadUpdate(BaseModel):
@@ -39,6 +41,8 @@ class LeadUpdate(BaseModel):
     credit_limit: float | None = None
     outstanding_amount: float | None = None
     dnd: bool | None = None
+    stage_key: str | None = Field(default=None, min_length=1, max_length=80)
+    custom_fields: dict | None = None
 
 
 class AssigneeOut(BaseModel):
@@ -78,6 +82,8 @@ class LeadOut(BaseModel):
     credit_limit: float | None
     outstanding_amount: float | None
     dnd: bool
+    stage_key: str = "new"
+    custom_fields: dict = Field(default_factory=dict)
     score: int = 0
     score_band: Literal["hot", "warm", "cool"] = "cool"
 

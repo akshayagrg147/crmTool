@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.deps import get_current_user, CurrentUser
 from app.core.limiter import limiter
-from app.core.security import create_access_token, create_refresh_token, decode_token, hash_password, verify_password
+from app.core.security import create_access_token, create_refresh_token, decode_token, hash_password, verify_password, verify_totp
 from app.models.organization import Organization
 from app.models.user import User
 from app.schemas.auth import (
@@ -65,6 +65,8 @@ async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depe
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid phone number or password")
     if not user.is_active:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Your account has been deactivated")
+    if user.two_factor_enabled and not verify_totp(user.two_factor_secret, payload.otp or ""):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, {"code": "two_factor_required", "message": "Enter the six-digit authenticator code"})
 
     org_name = None
     if user.organization_id:

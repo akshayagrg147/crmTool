@@ -57,7 +57,8 @@ apiClient.interceptors.response.use(
   (res) => res,
   async (error) => {
     const original = error.config;
-    if (error.response?.status === 401 && !original._retry && refreshToken) {
+    const isAuthRequest = typeof original?.url === "string" && (original.url.includes("/auth/login") || original.url.includes("/auth/refresh"));
+    if (error.response?.status === 401 && !isAuthRequest && !original._retry && refreshToken) {
       original._retry = true;
       const newAccess = await tryRefresh();
       if (newAccess) {

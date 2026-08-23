@@ -11,9 +11,13 @@ from app.core.deps import CurrentUser, require_org_user
 from app.models.call_log import CallLog
 from app.models.lead import Lead, LeadStatus
 from app.models.lead_assignment import LeadAssignmentHistory
+from app.models.lead_note import LeadNote
+from app.models.task import Task
 from app.models.user import UserRole
 from app.schemas.activity import LeadActivityOut
 from app.schemas.call_log import CallLogCreate, CallLogOut, FollowUpOut, PaginatedFollowUps
+from app.services.audit import record_audit
+from app.services.automation import run_automations
 
 router = APIRouter(prefix="/leads", tags=["calls"])
 followups_router = APIRouter(prefix="/follow-ups", tags=["follow-ups"])
@@ -56,6 +60,24 @@ async def log_call(
     lead.status = payload.outcome
     lead.last_contacted_at = datetime.now(timezone.utc)
     lead.next_follow_up_at = next_follow_up_at
+    record_audit(
+        db,
+        organization_id=current.organization_id,
+        actor_id=current.id,
+        entity_type="call",
+        entity_id=call.id,
+        action="logged",
+        summary=f"Call logged for {lead.name}: {payload.outcome.value}",
+        payload={"lead_id": str(lead.id), "outcome": payload.outcome.value, "duration_minutes": payload.duration_minutes},
+    )
+    await run_automations(
+        db,
+        organization_id=current.organization_id,
+        actor_id=current.id,
+        trigger="status_changed",
+        lead=lead,
+        context={"previous_status": "unknown"},
+    )
     await db.commit()
     result = await db.execute(select(CallLog).options(*CALL_LOAD_OPTIONS).where(CallLog.id == call.id))
     call = result.scalar_one()
@@ -120,6 +142,18 @@ async def get_lead_activity(
         )
         .order_by(LeadAssignmentHistory.created_at.desc())
     )
+    notes_result = await db.execute(
+        select(LeadNote)
+        .options(selectinload(LeadNote.author))
+        .where(LeadNote.lead_id == lead_id, LeadNote.organization_id == current.organization_id)
+        .order_by(LeadNote.created_at.desc())
+    )
+    tasks_result = await db.execute(
+        select(Task)
+        .options(selectinload(Task.creator))
+        .where(Task.lead_id == lead_id, Task.organization_id == current.organization_id)
+        .order_by(Task.created_at.desc())
+    )
 
     call_titles = {
         LeadStatus.new: "Call logged",
@@ -180,6 +214,34 @@ async def get_lead_activity(
             new_assignee_name=event.new_assignee.name if event.new_assignee else None,
         )
         for event in assignments_result.scalars().all()
+    )
+    events.extend(
+        LeadActivityOut(
+            id=note.id,
+            lead_id=lead.id,
+            event_type="note",
+            occurred_at=note.created_at,
+            actor_id=note.author_id,
+            actor_name=note.author.name if note.author else None,
+            title="Note added",
+            body=note.body,
+            source="note",
+        )
+        for note in notes_result.scalars().all()
+    )
+    events.extend(
+        LeadActivityOut(
+            id=task.id,
+            lead_id=lead.id,
+            event_type="task",
+            occurred_at=task.created_at,
+            actor_id=task.created_by,
+            actor_name=task.creator.name if task.creator else None,
+            title=f"Task created: {task.title}",
+            body=task.description,
+            source="task",
+        )
+        for task in tasks_result.scalars().all()
     )
     return sorted(events, key=lambda event: event.occurred_at, reverse=True)
 

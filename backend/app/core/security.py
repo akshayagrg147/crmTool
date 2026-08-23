@@ -1,3 +1,9 @@
+import base64
+import hashlib
+import hmac
+import secrets
+import struct
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -60,3 +66,25 @@ def decode_token(token: str) -> dict:
         return jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
     except JWTError as exc:
         raise ValueError("invalid token") from exc
+
+
+def generate_totp_secret() -> str:
+    return base64.b32encode(secrets.token_bytes(20)).decode("ascii").rstrip("=")
+
+
+def totp_code(secret: str, timestamp: int | None = None) -> str:
+    timestamp = int(time.time()) if timestamp is None else timestamp
+    counter = timestamp // 30
+    padded = secret + "=" * ((8 - len(secret) % 8) % 8)
+    key = base64.b32decode(padded, casefold=True)
+    digest = hmac.new(key, struct.pack(">Q", counter), hashlib.sha1).digest()
+    offset = digest[-1] & 0x0F
+    number = struct.unpack(">I", digest[offset : offset + 4])[0] & 0x7FFFFFFF
+    return f"{number % 1_000_000:06d}"
+
+
+def verify_totp(secret: str | None, code: str) -> bool:
+    if not secret or len(code.strip()) != 6 or not code.strip().isdigit():
+        return False
+    now = int(time.time())
+    return any(hmac.compare_digest(totp_code(secret, now + offset), code.strip()) for offset in (-30, 0, 30))

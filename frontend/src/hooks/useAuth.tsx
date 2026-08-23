@@ -10,7 +10,7 @@ interface AuthContextValue {
   isLoading: boolean;
   isImpersonating: boolean;
   impersonatedByName: string | null;
-  login: (phone: string, password: string, countryCode?: string) => Promise<UserOut>;
+  login: (phone: string, password: string, countryCode?: string, otp?: string) => Promise<UserOut>;
   logout: () => void;
   startImpersonation: (access: string, orgName: string) => void;
   exitImpersonation: () => void;
@@ -39,8 +39,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     retry: false,
   });
 
-  async function login(phone: string, password: string, countryCode?: string) {
-    const result = await authApi.login(phone, password, countryCode);
+  async function login(phone: string, password: string, countryCode?: string, otp?: string) {
+    const result = await authApi.login(phone, password, countryCode, otp);
     setTokens(result.tokens.access_token, result.tokens.refresh_token);
     setOrganizationName(result.organization_name);
     if (result.organization_name) localStorage.setItem("districall_org_name", result.organization_name);

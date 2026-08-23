@@ -12,7 +12,7 @@ class LeadActivityOut(BaseModel):
 
     id: uuid.UUID
     lead_id: uuid.UUID
-    event_type: Literal["created", "call", "assignment"]
+    event_type: Literal["created", "call", "assignment", "note", "task"]
     occurred_at: datetime
     actor_id: uuid.UUID | None = None
     actor_name: str | None = None

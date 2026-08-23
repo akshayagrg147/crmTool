@@ -9,6 +9,7 @@ class LoginRequest(BaseModel):
     phone: str = Field(min_length=1, max_length=30)
     password: str
     country_code: str | None = Field(default=None, max_length=8)
+    otp: str | None = Field(default=None, min_length=6, max_length=6)
 
 
 class TokenPair(BaseModel):

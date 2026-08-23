@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 from app.core.database import get_db
 from app.core.deps import CurrentUser, require_admin, require_admin_or_manager, require_org_user
 from app.models.call_log import CallLog
+from app.models.custom_field import CustomFieldDefinition, PipelineStage
 from app.models.lead import Lead, LeadCategory, LeadSource, LeadStatus
 from app.models.lead_category import LeadCategoryOption
 from app.models.lead_assignment import LeadAssignmentHistory
@@ -38,6 +39,8 @@ from app.schemas.lead import (
 from app.schemas.lost_deal import MarkLostRequest
 from app.services.distribution import assign_batch
 from app.services.assignment_history import record_assignment
+from app.services.audit import record_audit
+from app.services.automation import run_automations
 
 router = APIRouter(prefix="/leads", tags=["leads"])
 
@@ -123,6 +126,34 @@ def _assignment_to_out(event: LeadAssignmentHistory) -> AssignmentHistoryOut:
 
 def _category_label(value: str) -> str:
     return value.replace("_", " ").strip().title()
+
+
+async def _validate_lead_configuration(
+    db: AsyncSession,
+    organization_id: uuid.UUID,
+    *,
+    stage_key: str | None,
+    custom_fields: dict | None,
+) -> None:
+    if stage_key:
+        stage = await db.scalar(select(PipelineStage).where(PipelineStage.organization_id == organization_id, PipelineStage.key == stage_key))
+        if stage is None and stage_key not in {"new", "follow_up", "not_picked", "converted", "lost"}:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Unknown pipeline stage: {stage_key}")
+    if custom_fields is None:
+        return
+    definitions = (await db.execute(select(CustomFieldDefinition).where(CustomFieldDefinition.organization_id == organization_id, CustomFieldDefinition.is_active.is_(True)))).scalars().all()
+    known = {definition.key: definition for definition in definitions}
+    unknown = set(custom_fields) - set(known)
+    if unknown:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Unknown custom field(s): {', '.join(sorted(unknown))}")
+    missing = [
+        definition.label
+        for definition in definitions
+        if definition.required
+        and (definition.key not in custom_fields or custom_fields.get(definition.key) in (None, ""))
+    ]
+    if missing:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Required custom field(s) missing: {', '.join(missing)}")
 
 
 async def _resolve_categories(
@@ -358,6 +389,12 @@ async def add_lead(
     current: CurrentUser = Depends(require_admin_or_manager),
     db: AsyncSession = Depends(get_db),
 ):
+    await _validate_lead_configuration(
+        db,
+        current.organization_id,
+        stage_key=payload.stage_key,
+        custom_fields=payload.custom_fields,
+    )
     category, custom_category, interested_categories = await _resolve_categories(
         db, current.organization_id, payload.interested_categories or [payload.category]
     )
@@ -378,6 +415,8 @@ async def add_lead(
         credit_limit=payload.credit_limit,
         outstanding_amount=payload.outstanding_amount,
         dnd=payload.dnd,
+        stage_key=payload.stage_key or LeadStatus.new.value,
+        custom_fields=payload.custom_fields,
     )
     db.add(lead)
     await db.flush()
@@ -390,6 +429,23 @@ async def add_lead(
         assigned_by_id=current.id,
         action="created",
         source="manual",
+    )
+    record_audit(
+        db,
+        organization_id=current.organization_id,
+        actor_id=current.id,
+        entity_type="lead",
+        entity_id=lead.id,
+        action="created",
+        summary=f"Lead created: {lead.name}",
+        payload={"source": lead.source.value, "stage_key": lead.stage_key},
+    )
+    await run_automations(
+        db,
+        organization_id=current.organization_id,
+        actor_id=current.id,
+        trigger="lead_created",
+        lead=lead,
     )
     await db.commit()
     result = await db.execute(select(Lead).options(*LEAD_LOAD_OPTIONS).where(Lead.id == lead.id))
@@ -469,6 +525,16 @@ async def merge_duplicate_lead(
             action="merged",
             source="merge",
         )
+    record_audit(
+        db,
+        organization_id=current.organization_id,
+        actor_id=current.id,
+        entity_type="lead",
+        entity_id=primary.id,
+        action="merged",
+        summary=f"Merged duplicate lead {duplicate.name} into {primary.name}",
+        payload={"merged_lead_id": str(duplicate.id)},
+    )
     if primary.next_follow_up_at is None or (
         duplicate.next_follow_up_at is not None and duplicate.next_follow_up_at < primary.next_follow_up_at
     ):
@@ -612,7 +678,7 @@ async def update_lead(
     if current.role == UserRole.telecaller:
         if lead.assigned_to != current.id:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Not your lead")
-        disallowed = set(data.keys()) - {"status", "notes", "category", "interested_categories"}
+        disallowed = set(data.keys()) - {"status", "notes", "category", "interested_categories", "custom_fields", "stage_key"}
         if disallowed:
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN,
@@ -620,6 +686,7 @@ async def update_lead(
             )
 
     previous_assignee_id = lead.assigned_to
+    previous_status = lead.status
     if "assigned_to" in data and data["assigned_to"] is not None:
         assignee_result = await db.execute(
             select(User).where(
@@ -639,6 +706,15 @@ async def update_lead(
         data["custom_category"] = custom_category
         data["interested_categories"] = interested_categories
 
+    if "custom_fields" in data:
+        data["custom_fields"] = {**(lead.custom_fields or {}), **(data["custom_fields"] or {})}
+    await _validate_lead_configuration(
+        db,
+        current.organization_id,
+        stage_key=data.get("stage_key", lead.stage_key),
+        custom_fields=data.get("custom_fields") if "custom_fields" in data else None,
+    )
+
     for field, value in data.items():
         setattr(lead, field, value)
 
@@ -652,6 +728,36 @@ async def update_lead(
             assigned_by_id=current.id,
             action="reassigned",
             source="manual",
+        )
+
+    changed_fields = sorted(data.keys())
+    if changed_fields:
+        record_audit(
+            db,
+            organization_id=current.organization_id,
+            actor_id=current.id,
+            entity_type="lead",
+            entity_id=lead.id,
+            action="updated",
+            summary=f"Lead updated: {lead.name}",
+            payload={"fields": changed_fields},
+        )
+    if previous_status != lead.status:
+        await run_automations(
+            db,
+            organization_id=current.organization_id,
+            actor_id=current.id,
+            trigger="status_changed",
+            lead=lead,
+            context={"previous_status": previous_status.value},
+        )
+    if previous_assignee_id != lead.assigned_to:
+        await run_automations(
+            db,
+            organization_id=current.organization_id,
+            actor_id=current.id,
+            trigger="lead_assigned",
+            lead=lead,
         )
 
     await db.commit()
@@ -670,6 +776,16 @@ async def delete_lead(
     lead = result.scalar_one_or_none()
     if lead is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Lead not found")
+    record_audit(
+        db,
+        organization_id=current.organization_id,
+        actor_id=current.id,
+        entity_type="lead",
+        entity_id=lead.id,
+        action="deleted",
+        summary=f"Lead deleted: {lead.name}",
+        payload={"phone": lead.phone},
+    )
     await db.delete(lead)
     await db.commit()
 
@@ -728,6 +844,23 @@ async def reassign_lead(
             action="reassigned",
             source="manual",
         )
+        record_audit(
+            db,
+            organization_id=current.organization_id,
+            actor_id=current.id,
+            entity_type="lead",
+            entity_id=lead.id,
+            action="reassigned",
+            summary=f"Lead reassigned: {lead.name}",
+            payload={"previous_assignee_id": str(previous_assignee_id) if previous_assignee_id else None, "new_assignee_id": str(lead.assigned_to) if lead.assigned_to else None},
+        )
+        await run_automations(
+            db,
+            organization_id=current.organization_id,
+            actor_id=current.id,
+            trigger="lead_assigned",
+            lead=lead,
+        )
     await db.commit()
     result = await db.execute(select(Lead).options(*LEAD_LOAD_OPTIONS).where(Lead.id == lead.id))
     lead = result.scalar_one()
@@ -781,6 +914,17 @@ async def bulk_reassign_leads(
             action="reassigned",
             source="bulk",
         )
+        record_audit(
+            db,
+            organization_id=current.organization_id,
+            actor_id=current.id,
+            entity_type="lead",
+            entity_id=lead.id,
+            action="reassigned",
+            summary=f"Lead reassigned in bulk: {lead.name}",
+            payload={"previous_assignee_id": str(previous_assignee_id) if previous_assignee_id else None, "new_assignee_id": str(lead.assigned_to), "source": "bulk"},
+        )
+        await run_automations(db, organization_id=current.organization_id, actor_id=current.id, trigger="lead_assigned", lead=lead)
         updated_count += 1
 
     await db.commit()
@@ -825,6 +969,17 @@ async def auto_assign_unassigned_leads(
             action="auto_assigned",
             source="automatic",
         )
+        record_audit(
+            db,
+            organization_id=current.organization_id,
+            actor_id=current.id,
+            entity_type="lead",
+            entity_id=lead.id,
+            action="auto_assigned",
+            summary=f"Lead auto-assigned: {lead.name}",
+            payload={"new_assignee_id": str(assignee.id), "source": "automatic"},
+        )
+        await run_automations(db, organization_id=current.organization_id, actor_id=current.id, trigger="lead_assigned", lead=lead)
 
     await db.commit()
     return AutoAssignResult(assigned_count=len(leads), assignments=assignment_counts)
@@ -886,6 +1041,24 @@ async def mark_lead_lost(
             action="lost_handoff",
             source="lost_deal",
         )
+    record_audit(
+        db,
+        organization_id=current.organization_id,
+        actor_id=current.id,
+        entity_type="lead",
+        entity_id=lead.id,
+        action="marked_lost",
+        summary=f"Lead marked as lost: {lead.name}",
+        payload={"reason": reason, "manager_id": str(payload.manager_id)},
+    )
+    await run_automations(
+        db,
+        organization_id=current.organization_id,
+        actor_id=current.id,
+        trigger="status_changed",
+        lead=lead,
+        context={"previous_status": "unknown"},
+    )
     lead.last_contacted_at = datetime.now(timezone.utc)
     lead.next_follow_up_at = None
     await db.commit()
@@ -1255,6 +1428,17 @@ async def bulk_import_leads(
             action="created",
             source="bulk_import",
         )
+        record_audit(
+            db,
+            organization_id=current.organization_id,
+            actor_id=current.id,
+            entity_type="lead",
+            entity_id=lead.id,
+            action="created",
+            summary=f"Lead imported: {lead.name}",
+            payload={"source": source.value, "import_source": "bulk_import"},
+        )
+        await run_automations(db, organization_id=current.organization_id, actor_id=current.id, trigger="lead_created", lead=lead)
     await db.commit()
 
     return BulkImportResult(
@@ -1275,6 +1459,16 @@ async def clear_all_leads(
 ):
     result = await db.execute(select(Lead).where(Lead.organization_id == current.organization_id))
     leads = result.scalars().all()
+    record_audit(
+        db,
+        organization_id=current.organization_id,
+        actor_id=current.id,
+        entity_type="lead",
+        entity_id=None,
+        action="cleared",
+        summary=f"Cleared all leads ({len(leads)} records)",
+        payload={"count": len(leads)},
+    )
     for lead in leads:
         await db.delete(lead)
     await db.commit()

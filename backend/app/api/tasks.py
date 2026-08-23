@@ -12,6 +12,8 @@ from app.models.task import Task, TaskStatus
 from app.models.lead import Lead
 from app.models.user import User, UserRole
 from app.schemas.task import PaginatedTasks, TaskCreate, TaskOut, TaskUpdate
+from app.services.audit import record_audit
+from app.services.automation import run_automations
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -122,6 +124,7 @@ async def create_task(payload: TaskCreate, current: CurrentUser = Depends(requir
         due_at=payload.due_at,
     )
     db.add(task)
+    record_audit(db, organization_id=current.organization_id, actor_id=current.id, entity_type="task", entity_id=task.id, action="created", summary=f"Task created: {task.title}", payload={"lead_id": str(task.lead_id) if task.lead_id else None})
     await db.commit()
     result = await db.execute(select(Task).options(*TASK_LOAD_OPTIONS).where(Task.id == task.id))
     return _to_out(result.scalar_one())
@@ -150,6 +153,10 @@ async def update_task(task_id: uuid.UUID, payload: TaskUpdate, current: CurrentU
         values["description"] = values["description"].strip()
     for key, value in values.items():
         setattr(task, key, value)
+    record_audit(db, organization_id=current.organization_id, actor_id=current.id, entity_type="task", entity_id=task.id, action="updated", summary=f"Task updated: {task.title}", payload={"fields": sorted(values.keys())})
+    if values.get("status") == TaskStatus.completed and task.lead_id:
+        lead = await _get_org_lead(db, current, task.lead_id)
+        await run_automations(db, organization_id=current.organization_id, actor_id=current.id, trigger="task_completed", lead=lead, context={"task_id": str(task.id)})
     await db.commit()
     result = await db.execute(select(Task).options(*TASK_LOAD_OPTIONS).where(Task.id == task.id))
     return _to_out(result.scalar_one())
@@ -163,5 +170,6 @@ async def delete_task(task_id: uuid.UUID, current: CurrentUser = Depends(require
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Task not found")
     if current.role == UserRole.telecaller and task.created_by != current.id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "You can only delete tasks you created")
+    record_audit(db, organization_id=current.organization_id, actor_id=current.id, entity_type="task", entity_id=task.id, action="deleted", summary=f"Task deleted: {task.title}")
     await db.delete(task)
     await db.commit()
