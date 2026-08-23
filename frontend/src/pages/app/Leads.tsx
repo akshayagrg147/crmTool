@@ -23,6 +23,8 @@ import {
   Shuffle,
   GitMerge,
   Bookmark,
+  ArrowUpRight,
+  SlidersHorizontal,
 } from "lucide-react";
 import { leadsApi, usersApi } from "@/api/endpoints";
 import { useAuth } from "@/hooks/useAuth";
@@ -185,6 +187,11 @@ export function LeadsPage() {
 
   const canManage = user?.role === "admin" || user?.role === "manager";
   const canAdmin = user?.role === "admin";
+  const { data: unassignedLeadSummary } = useQuery({
+    queryKey: ["leads", "unassigned-summary"],
+    queryFn: () => leadsApi.list({ unassigned_only: true, page: 1, page_size: 1 }),
+    enabled: canManage,
+  });
   const totalPages = data ? Math.max(1, Math.ceil(data.total / pageSize)) : 1;
   const visibleUnassignedIds = useMemo(
     () => data?.items.filter((lead) => !lead.assigned_to).map((lead) => lead.id) ?? [],
@@ -192,6 +199,52 @@ export function LeadsPage() {
   );
   const allVisibleUnassignedSelected =
     visibleUnassignedIds.length > 0 && visibleUnassignedIds.every((id) => selectedLeadIds.includes(id));
+  const callbackLeadsInView = useMemo(
+    () => data?.items.filter((lead) => !!lead.next_follow_up_at).length ?? 0,
+    [data?.items]
+  );
+  const overdueLeadsInView = useMemo(
+    () =>
+      data?.items.filter(
+        (lead) => lead.next_follow_up_at && new Date(lead.next_follow_up_at).getTime() < Date.now()
+      ).length ?? 0,
+    [data?.items]
+  );
+  const activeFilterCount = [
+    search,
+    sourceFilter,
+    statusFilter,
+    assigneeFilter,
+    categoryFilter,
+    cityFilter,
+    callbackFilter,
+  ].filter(Boolean).length;
+
+  function resetFilters() {
+    setSearch("");
+    setSourceFilter("");
+    setStatusFilter("");
+    setAssigneeFilter("");
+    setCategoryFilter("");
+    setCityFilter("");
+    setCallbackFilter("");
+    setSearchParams({});
+  }
+
+  function showQueue(queue: "all" | "unassigned" | "scheduled" | "overdue") {
+    if (queue === "all") {
+      resetFilters();
+      return;
+    }
+
+    if (queue === "unassigned") {
+      setAssigneeFilter("unassigned");
+      setCallbackFilter("");
+      return;
+    }
+
+    setCallbackFilter(queue);
+  }
 
   function toggleLeadSelection(id: string) {
     setSelectedLeadIds((current) =>
@@ -261,45 +314,130 @@ export function LeadsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="page-eyebrow mb-1">Workspace / Pipeline</p>
-          <h1 className="page-title">{isTelecaller ? "My Leads" : "Leads"}</h1>
-          <p className="page-subtitle">{data ? `${data.total} total leads` : "Loading..."}</p>
+    <div className="flex flex-col gap-5 lg:gap-6">
+      <section className="heritage-panel overflow-hidden rounded-[14px] border border-primary-dark/70 px-5 py-5 shadow-card sm:px-6 sm:py-6">
+        <div className="flex flex-wrap items-start justify-between gap-5">
+          <div>
+            <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.19em] text-accent">
+              <span className="h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_0_4px_rgba(201,155,74,0.12)]" />
+              Workspace / Pipeline
+            </div>
+            <h1 className="text-[32px] font-semibold leading-none text-white sm:text-[38px]">
+              {isTelecaller ? "My lead desk" : "Lead command center"}
+            </h1>
+            <p className="mt-3 max-w-xl text-sm leading-relaxed text-primary-soft/80">
+              {isTelecaller
+                ? "Keep every customer conversation, callback and next step in one focused queue."
+                : "Monitor your lead flow, identify work that needs attention, and keep ownership moving."}
+            </p>
+          </div>
+          <div className="rounded-full border border-white/10 bg-white/[0.07] px-3 py-1.5 text-xs font-medium text-white/85">
+            <span className="mr-2 inline-block h-1.5 w-1.5 rounded-full bg-[#65C59E] align-middle shadow-[0_0_0_4px_rgba(101,197,158,0.12)]" />
+            Live lead queue
+          </div>
         </div>
-        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+        <div className="mt-6 flex w-full flex-wrap items-center gap-2 border-t border-white/10 pt-4">
           {canManage && (
             <>
               {canAdmin && (
                 <>
-                  <button className="btn-secondary text-sm" onClick={() => setShowCategories(true)}>
+                  <button className="btn-secondary border-white/10 bg-white/[0.08] text-sm text-white hover:border-white/20 hover:bg-white/[0.14] hover:text-white" onClick={() => setShowCategories(true)}>
                     <Tags size={16} /> Categories
                   </button>
-                  <button className="btn-secondary text-sm" onClick={handleExport} disabled={exporting}>
+                  <button className="btn-secondary border-white/10 bg-white/[0.08] text-sm text-white hover:border-white/20 hover:bg-white/[0.14] hover:text-white" onClick={handleExport} disabled={exporting}>
                     <Download size={16} /> {exporting ? "Exporting..." : "Export"}
                   </button>
-                  <button className="btn-secondary text-sm text-danger hover:border-danger/30 hover:bg-danger/5 hover:text-danger" onClick={() => setShowClearAll(true)}>
+                  <button className="btn-secondary border-white/10 bg-white/[0.08] text-sm text-[#FFB6AF] hover:border-danger/40 hover:bg-danger/15 hover:text-[#FFCBC6]" onClick={() => setShowClearAll(true)}>
                     <Trash2 size={16} /> Clear All
                   </button>
                 </>
               )}
-              <button className="btn-secondary text-sm" onClick={() => setShowBulk(true)}>
+              <button className="btn-secondary border-white/10 bg-white/[0.08] text-sm text-white hover:border-white/20 hover:bg-white/[0.14] hover:text-white" onClick={() => setShowBulk(true)}>
                 <UploadCloud size={16} /> Bulk Import
               </button>
-              <button className="btn-secondary text-sm" onClick={() => setShowAutoDistribute(true)}>
+              <button className="btn-secondary border-white/10 bg-white/[0.08] text-sm text-white hover:border-white/20 hover:bg-white/[0.14] hover:text-white" onClick={() => setShowAutoDistribute(true)}>
                 <Shuffle size={16} /> Auto-distribute
               </button>
-              <button className="btn-primary text-sm" onClick={() => setShowAdd(true)}>
+              <button className="btn-primary ml-auto bg-accent text-sm text-primary-dark hover:bg-[#D5AA5F] focus-visible:ring-accent/30" onClick={() => setShowAdd(true)}>
                 <Plus size={16} /> Add Lead
               </button>
             </>
           )}
         </div>
-      </div>
+      </section>
 
-      <div className="filter-bar">
-        <div className="relative min-w-[220px] flex-1 basis-full sm:basis-auto">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <button
+          type="button"
+          onClick={() => showQueue("all")}
+          className="group rounded-[12px] border border-ink-100 bg-surface p-4 text-left shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-card-hover"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-[9px] bg-primary-soft text-primary"><Contact size={17} /></div>
+            <ArrowUpRight size={16} className="text-ink-300 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-primary" />
+          </div>
+          <p className="mt-5 text-[10px] font-bold uppercase tracking-[0.14em] text-ink-500">Lead base</p>
+          <p className="mt-1 text-2xl font-semibold tracking-tight text-ink-900 tabular-nums">{data ? data.total.toLocaleString() : "—"}</p>
+          <p className="mt-1 text-xs text-ink-500">All leads in this workspace</p>
+        </button>
+        <button
+          type="button"
+          disabled={isTelecaller}
+          onClick={() => showQueue("unassigned")}
+          className="group rounded-[12px] border border-ink-100 bg-surface p-4 text-left shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-accent/35 hover:shadow-card-hover disabled:cursor-default disabled:hover:translate-y-0 disabled:hover:border-ink-100"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-[9px] bg-accent-soft text-accent-dark"><UserRoundX size={17} /></div>
+            {!isTelecaller && <ArrowUpRight size={16} className="text-ink-300 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-accent-dark" />}
+          </div>
+          <p className="mt-5 text-[10px] font-bold uppercase tracking-[0.14em] text-ink-500">Unassigned</p>
+          <p className="mt-1 text-2xl font-semibold tracking-tight text-ink-900 tabular-nums">{isTelecaller ? "—" : unassignedLeadSummary?.total ?? "—"}</p>
+          <p className="mt-1 text-xs text-ink-500">{isTelecaller ? "Managed by your workspace" : "Workspace total — assign now"}</p>
+        </button>
+        <button
+          type="button"
+          onClick={() => showQueue("scheduled")}
+          className="group rounded-[12px] border border-ink-100 bg-surface p-4 text-left shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-secondary/35 hover:shadow-card-hover"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-[9px] bg-secondary/10 text-secondary"><CalendarClock size={17} /></div>
+            <ArrowUpRight size={16} className="text-ink-300 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-secondary" />
+          </div>
+          <p className="mt-5 text-[10px] font-bold uppercase tracking-[0.14em] text-ink-500">Callbacks queued</p>
+          <p className="mt-1 text-2xl font-semibold tracking-tight text-ink-900 tabular-nums">{callbackLeadsInView}</p>
+          <p className="mt-1 text-xs text-ink-500">Scheduled in the visible queue</p>
+        </button>
+        <button
+          type="button"
+          onClick={() => showQueue("overdue")}
+          className="group rounded-[12px] border border-ink-100 bg-surface p-4 text-left shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-danger/35 hover:shadow-card-hover"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-[9px] bg-danger/10 text-danger"><Clock size={17} /></div>
+            <ArrowUpRight size={16} className="text-ink-300 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-danger" />
+          </div>
+          <p className="mt-5 text-[10px] font-bold uppercase tracking-[0.14em] text-ink-500">Past due</p>
+          <p className="mt-1 text-2xl font-semibold tracking-tight text-ink-900 tabular-nums">{overdueLeadsInView}</p>
+          <p className="mt-1 text-xs text-ink-500">Callbacks requiring attention</p>
+        </button>
+      </section>
+
+      <section className="card overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-100 bg-[#FBFBF8] px-4 py-3.5 sm:px-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-[9px] bg-primary-soft text-primary"><SlidersHorizontal size={17} /></div>
+            <div>
+              <h2 className="text-sm font-semibold text-ink-900">Find the right lead</h2>
+              <p className="mt-0.5 text-xs text-ink-500">Search, segment and return to your saved views.</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {activeFilterCount > 0 && <span className="badge bg-accent-soft text-accent-dark">{activeFilterCount} active</span>}
+            {activeFilterCount > 0 && <button className="btn-ghost min-h-8 px-2.5 py-1 text-xs" onClick={resetFilters}>Reset filters</button>}
+          </div>
+        </div>
+        <div className="grid gap-2.5 p-3.5 sm:grid-cols-2 sm:p-4 lg:grid-cols-4 xl:grid-cols-6">
+        <div className="relative min-w-[220px] sm:col-span-2 xl:col-span-2">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-300" />
           <input
             className="input pl-8 py-2"
@@ -316,7 +454,7 @@ export function LeadsPage() {
             }}
           />
         </div>
-        <select aria-label="Filter by source" className="input w-full py-2 sm:w-auto" value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value as LeadSource | "")}>
+        <select aria-label="Filter by source" className="input py-2" value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value as LeadSource | "")}>
           <option value="">All Sources</option>
           <option value="manual">Manual</option>
           <option value="indiamart">IndiaMART</option>
@@ -325,7 +463,7 @@ export function LeadsPage() {
           <option value="website">Website</option>
           <option value="referral">Referral</option>
         </select>
-        <select aria-label="Filter by status" className="input w-full py-2 sm:w-auto" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as LeadStatus | "")}>
+        <select aria-label="Filter by status" className="input py-2" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as LeadStatus | "")}>
           <option value="">All Statuses</option>
           <option value="new">New</option>
           <option value="follow_up">Follow Up</option>
@@ -336,7 +474,7 @@ export function LeadsPage() {
         {!isTelecaller && (
           <select
             aria-label="Filter by assignee"
-            className="input w-full py-2 sm:w-auto"
+            className="input py-2"
             value={assigneeFilter}
             onChange={(e) => {
               const value = e.target.value;
@@ -371,7 +509,7 @@ export function LeadsPage() {
           </select>
         )}
         <select
-          className="input w-full py-2 sm:w-auto"
+          className="input py-2"
           aria-label="Filter by category"
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value as LeadCategory | "")}
@@ -384,7 +522,7 @@ export function LeadsPage() {
           ))}
         </select>
         {!!usedCities?.length && (
-          <select aria-label="Filter by city" className="input w-full py-2 sm:w-auto" value={cityFilter} onChange={(e) => setCityFilter(e.target.value)}>
+          <select aria-label="Filter by city" className="input py-2" value={cityFilter} onChange={(e) => setCityFilter(e.target.value)}>
             <option value="">All Cities</option>
             {usedCities.map((c) => (
               <option key={c} value={c}>
@@ -394,7 +532,7 @@ export function LeadsPage() {
           </select>
         )}
         <select
-          className="input w-full py-2 sm:w-auto"
+          className="input py-2"
           aria-label="Filter by callback schedule"
           value={callbackFilter}
           onChange={(e) => setCallbackFilter(e.target.value as "" | "scheduled" | "overdue")}
@@ -403,9 +541,9 @@ export function LeadsPage() {
           <option value="scheduled">Scheduled Callbacks (soonest first)</option>
           <option value="overdue">Overdue Callbacks</option>
         </select>
-        <div className="flex w-full items-center gap-2 sm:w-auto">
+        <div className="flex items-center gap-2 sm:col-span-2 xl:col-span-2">
           <select
-            className="input min-w-0 flex-1 py-2 sm:w-48 sm:flex-none"
+            className="input min-w-0 flex-1 py-2"
             aria-label="Saved lead views"
             value=""
             onChange={(event) => {
@@ -420,13 +558,14 @@ export function LeadsPage() {
             <Bookmark size={15} /> <span className="hidden sm:inline">Save view</span>
           </button>
         </div>
-      </div>
+        </div>
+      </section>
 
       {canManage && selectedLeadIds.length > 0 && (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-primary/15 bg-primary-soft/50 px-4 py-3">
+        <div className="flex flex-wrap items-center gap-3 rounded-[12px] border border-accent/25 bg-accent-soft/45 px-4 py-3 shadow-card">
           <div className="mr-auto">
-            <p className="text-sm font-semibold text-ink-900">{selectedLeadIds.length} unassigned lead{selectedLeadIds.length === 1 ? "" : "s"} selected</p>
-            <p className="text-xs text-ink-500">Choose an active telecaller to assign them together.</p>
+            <p className="text-sm font-semibold text-ink-900">{selectedLeadIds.length} unassigned lead{selectedLeadIds.length === 1 ? "" : "s"} ready to assign</p>
+            <p className="text-xs text-ink-500">Choose an active telecaller to move this group in one step.</p>
           </div>
           <select
             aria-label="Assign selected leads to telecaller"
@@ -461,7 +600,17 @@ export function LeadsPage() {
         </div>
       )}
 
-      <div className="card">
+      <div className="card overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-100 bg-[#FBFBF8] px-4 py-3.5 sm:px-5">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-accent-dark">Operational queue</p>
+            <h2 className="mt-1 text-[17px] font-semibold text-ink-900">Lead records</h2>
+            <p className="mt-0.5 text-xs text-ink-500">Open a lead to review its history, notes and next action.</p>
+          </div>
+          <div className="rounded-full border border-ink-100 bg-surface px-3 py-1.5 text-xs font-medium text-ink-600">
+            {data ? `${data.items.length} of ${data.total.toLocaleString()} visible` : "Preparing queue"}
+          </div>
+        </div>
         {isLoading ? (
           <TableSkeleton rows={8} cols={4} />
         ) : !data?.items.length ? (
@@ -481,7 +630,7 @@ export function LeadsPage() {
           <div className={`transition-opacity duration-200 ${isPlaceholderData ? "opacity-60" : ""}`}>
             <div className="divide-y divide-ink-100 md:hidden">
               {data.items.map((lead) => (
-                <article key={lead.id} className={`p-4 ${selectedLeadIds.includes(lead.id) ? "bg-primary-soft/30" : ""}`}>
+                <article key={lead.id} className={`border-l-2 border-transparent p-4 transition-colors hover:bg-[#FBFBF8] ${selectedLeadIds.includes(lead.id) ? "border-l-primary bg-primary-soft/30" : ""}`}>
                   <div className="flex items-start gap-3">
                     {canManage && (
                       <input
@@ -535,7 +684,7 @@ export function LeadsPage() {
             <div className="hidden overflow-x-auto scroll-shadow-x md:block">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-ink-500 text-xs uppercase tracking-wide">
+                <tr className="bg-[#F3F5F4] text-left text-ink-500 text-xs uppercase tracking-wide">
                   {canManage && (
                     <th className="font-medium px-5 py-3">
                       <input
@@ -563,7 +712,7 @@ export function LeadsPage() {
                 {data.items.map((lead, i) => (
                   <tr
                     key={lead.id}
-                    className={`border-t border-ink-100 transition-colors duration-150 hover:bg-bg/60 ${selectedLeadIds.includes(lead.id) ? "bg-primary-soft/30" : ""}`}
+                    className={`border-t border-ink-100 transition-colors duration-150 hover:bg-[#FBFBF8] ${selectedLeadIds.includes(lead.id) ? "bg-primary-soft/30" : ""}`}
                   >
                     {canManage && (
                       <td className="px-5 py-3">
