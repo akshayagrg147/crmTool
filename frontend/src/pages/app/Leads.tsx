@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Plus,
@@ -37,7 +37,6 @@ import { StatusBadge, SourceBadge, CategoryBadge, DndBadge } from "@/components/
 import { AddLeadModal } from "@/components/leads/AddLeadModal";
 import { BulkImportModal } from "@/components/leads/BulkImportModal";
 import { CallLogModal } from "@/components/leads/CallLogModal";
-import { LeadDetailModal } from "@/components/leads/LeadDetailModal";
 import { EditLeadModal } from "@/components/leads/EditLeadModal";
 import { MarkLostModal } from "@/components/leads/MarkLostModal";
 import { CategoryManagerModal } from "@/components/leads/CategoryManagerModal";
@@ -54,6 +53,7 @@ export function LeadsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const isTelecaller = user?.role === "telecaller";
 
@@ -78,7 +78,6 @@ export function LeadsPage() {
   const [showAutoDistribute, setShowAutoDistribute] = useState(false);
   const [callModalLead, setCallModalLead] = useState<LeadOut | null>(null);
   const [callModalOutcome, setCallModalOutcome] = useState<LeadStatus | undefined>();
-  const [detailLead, setDetailLead] = useState<LeadOut | null>(null);
   const [editLead, setEditLead] = useState<LeadOut | null>(null);
   const [categoryLead, setCategoryLead] = useState<LeadOut | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<LeadOut | null>(null);
@@ -643,7 +642,7 @@ export function LeadsPage() {
                         onChange={() => toggleLeadSelection(lead.id)}
                       />
                     )}
-                    <button type="button" className="flex min-w-0 flex-1 items-start gap-3 text-left" onClick={() => setDetailLead(lead)}>
+                    <button type="button" className="flex min-w-0 flex-1 items-start gap-3 text-left" onClick={() => navigate(`/leads/${lead.id}`)}>
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-xs font-bold text-primary">
                       {initials(lead.name)}
                     </div>
@@ -730,7 +729,7 @@ export function LeadsPage() {
                     )}
                     <td className="px-5 py-3 text-ink-500 tabular-nums">{(page - 1) * pageSize + i + 1}</td>
                     <td className="px-5 py-3 text-ink-700 text-xs whitespace-nowrap">{formatDate(lead.created_at)}</td>
-                    <td className="px-5 py-3 cursor-pointer" onClick={() => setDetailLead(lead)}>
+                    <td className="px-5 py-3 cursor-pointer" onClick={() => navigate(`/leads/${lead.id}`)}>
                       <div className="flex items-center gap-2.5">
                         <div className="h-8 w-8 rounded-full bg-badge-indigo/10 text-badge-indigo flex items-center justify-center text-[11px] font-semibold shrink-0">
                           {initials(lead.name)}
@@ -882,24 +881,6 @@ export function LeadsPage() {
         onClose={() => setCallModalLead(null)}
         lead={callModalLead}
         defaultOutcome={callModalOutcome}
-      />
-      <LeadDetailModal
-        open={!!detailLead}
-        onClose={() => setDetailLead(null)}
-        lead={detailLead}
-        onEdit={
-          canManage
-            ? () => {
-                setEditLead(detailLead);
-                setDetailLead(null);
-              }
-            : undefined
-        }
-        onLogCall={() => {
-          setCallModalLead(detailLead);
-          setCallModalOutcome(undefined);
-          setDetailLead(null);
-        }}
       />
       <EditLeadModal open={!!editLead} onClose={() => setEditLead(null)} lead={editLead} />
       <MergeLeadModal lead={mergeLead} onClose={() => setMergeLead(null)} />

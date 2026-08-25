@@ -7,6 +7,7 @@ import { LoginPage } from "@/pages/Login";
 import { LandingPageV2 } from "@/pages/LandingV2";
 import { DashboardPageV2 } from "@/pages/app/DashboardV2";
 import { LeadsPage } from "@/pages/app/Leads";
+import { LeadDetailsPage } from "@/pages/app/LeadDetails";
 import { FollowUpsPage } from "@/pages/app/FollowUps";
 import { TasksPage } from "@/pages/app/Tasks";
 import { WorkspaceSettingsPage } from "@/pages/app/WorkspaceSettings";
@@ -77,6 +78,7 @@ export function App() {
       >
         <Route path="/dashboard" element={<DashboardPageV2 />} />
         <Route path="/leads" element={<LeadsPage />} />
+        <Route path="/leads/:leadId" element={<LeadDetailsPage />} />
         <Route path="/follow-ups" element={<FollowUpsPage />} />
       <Route path="/tasks" element={<TasksPage />} />
       <Route path="/workspace-settings" element={<WorkspaceSettingsPage />} />
