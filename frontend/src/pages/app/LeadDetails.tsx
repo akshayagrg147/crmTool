@@ -12,6 +12,7 @@ import {
   FileText,
   History,
   IndianRupee,
+  ListFilter,
   MapPin,
   MessageCircle,
   Paperclip,
@@ -43,6 +44,8 @@ import {
 import type { LeadActivityOut, LeadOut, PipelineStage } from "@/api/types";
 
 type DetailTab = "overview" | "activity" | "notes";
+type TimelineView = "history" | "interactions";
+type TimelineFilter = "all" | "calls" | "notes" | "ownership";
 type ActionTone = "danger" | "warning" | "success" | "neutral" | "primary";
 type NextAction = {
   tone: ActionTone;
@@ -109,6 +112,9 @@ export function LeadDetailsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<DetailTab>("overview");
+  const [timelineView, setTimelineView] = useState<TimelineView>("history");
+  const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>("all");
+  const [expandedTimelineEvents, setExpandedTimelineEvents] = useState<Set<string>>(() => new Set());
   const [showCallLog, setShowCallLog] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [noteBody, setNoteBody] = useState("");
@@ -206,7 +212,22 @@ export function LeadDetailsPage() {
     () => callActivity.reduce((total, event) => total + (event.duration_minutes ?? 0), 0),
     [callActivity]
   );
+  const timelineActivity = useMemo(() => activity.filter((event) => {
+    if (timelineView === "interactions" && event.event_type !== "call" && event.event_type !== "note") return false;
+    if (timelineFilter === "calls") return event.event_type === "call";
+    if (timelineFilter === "notes") return event.event_type === "note";
+    if (timelineFilter === "ownership") return event.event_type === "assignment";
+    return true;
+  }), [activity, timelineFilter, timelineView]);
   const canManage = user?.role === "admin" || user?.role === "manager";
+  const toggleTimelineEvent = (eventId: string) => {
+    setExpandedTimelineEvents((current) => {
+      const next = new Set(current);
+      if (next.has(eventId)) next.delete(eventId);
+      else next.add(eventId);
+      return next;
+    });
+  };
 
   if (isLoading) {
     return <LeadRecordLoading onBack={() => navigate("/leads")} />;
@@ -387,16 +408,39 @@ export function LeadDetailsPage() {
       )}
 
       {activeTab === "activity" && (
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <section className="card p-5 sm:p-6">
+        <section className="card overflow-hidden">
+          <div className="flex flex-wrap items-start justify-between gap-4 px-5 py-5 sm:px-6">
             <SectionHeading eyebrow="Complete record" title="Activity timeline" icon={History} aside={activity.length ? `${activity.length} events · ${formatMinutes(totalTalkTime)} talk time` : undefined} />
-            <ActivityTimeline activity={activity} isLoading={activityLoading} activeCallbackAt={lead.next_follow_up_at} />
-          </section>
-          <section className="card p-5 sm:p-6">
-            <SectionHeading eyebrow="Accountability" title="Assignment history" icon={UserRound} />
-            <div className="mt-5 space-y-4">{assignmentHistory.length ? assignmentHistory.map((entry) => <div key={entry.id} className="rounded-[9px] border border-ink-100 bg-[#FBFBF8] px-3.5 py-3"><p className="text-sm font-semibold text-ink-800">{entry.previous_assignee_name ?? "Unassigned"} → {entry.new_assignee_name ?? "Unassigned"}</p><p className="mt-1 text-xs text-ink-500">{entry.action} by {entry.assigned_by_name ?? "System"}</p><p className="mt-1 text-xs text-ink-400">{formatDateTime(entry.created_at)}</p></div>) : <p className="text-sm text-ink-500">No assignment changes have been recorded.</p>}</div>
-          </section>
-        </div>
+            {lead.next_follow_up_at && <div className="rounded-[9px] border border-warning/25 bg-warning/5 px-3 py-2 text-right"><p className="text-[10px] font-bold uppercase tracking-[0.12em] text-warning">Upcoming callback</p><p className="mt-0.5 text-xs font-semibold text-ink-700">{formatCallbackTime(lead.next_follow_up_at)}</p></div>}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 border-y border-ink-100 bg-[#FBFBF8] px-5 py-2.5 sm:px-6">
+            <div className="flex items-center gap-1 rounded-[9px] border border-ink-100 bg-white p-1" role="tablist" aria-label="Timeline views">
+              <button type="button" role="tab" aria-selected={timelineView === "history"} onClick={() => setTimelineView("history")} className={`min-h-8 rounded-[6px] px-3 text-xs font-semibold transition-colors ${timelineView === "history" ? "bg-primary-soft text-primary" : "text-ink-500 hover:text-ink-800"}`}>History</button>
+              <button type="button" role="tab" aria-selected={timelineView === "interactions"} onClick={() => setTimelineView("interactions")} className={`min-h-8 rounded-[6px] px-3 text-xs font-semibold transition-colors ${timelineView === "interactions" ? "bg-primary-soft text-primary" : "text-ink-500 hover:text-ink-800"}`}>Interactions</button>
+            </div>
+            <label className="inline-flex min-h-9 items-center gap-2 rounded-[8px] border border-ink-100 bg-white px-2.5 text-xs font-medium text-ink-600">
+              <ListFilter size={14} className="text-primary" />
+              <span className="sr-only">Filter timeline events</span>
+              <select value={timelineFilter} onChange={(event) => setTimelineFilter(event.target.value as TimelineFilter)} className="bg-transparent pr-1 text-xs font-semibold text-ink-700 outline-none">
+                <option value="all">All activity</option>
+                <option value="calls">Calls only</option>
+                <option value="notes">Notes only</option>
+                <option value="ownership">Ownership only</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="px-5 py-5 sm:px-6 sm:py-6">
+            <ActivityTimeline activity={timelineActivity} isLoading={activityLoading} activeCallbackAt={lead.next_follow_up_at} expandedEventIds={expandedTimelineEvents} onToggleEvent={toggleTimelineEvent} />
+            {assignmentHistory.length > 0 && (
+              <details className="mt-7 border-t border-ink-100 pt-4">
+                <summary className="cursor-pointer list-none text-sm font-semibold text-ink-700 marker:content-none"><span className="inline-flex items-center gap-2"><UserRound size={15} className="text-primary" /> View complete ownership history <span className="text-xs font-medium text-ink-400">({assignmentHistory.length})</span></span></summary>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{assignmentHistory.map((entry) => <div key={entry.id} className="rounded-[9px] border border-ink-100 bg-[#FBFBF8] px-3 py-2.5"><p className="text-xs font-semibold text-ink-800">{entry.previous_assignee_name ?? "Unassigned"} → {entry.new_assignee_name ?? "Unassigned"}</p><p className="mt-1 text-[11px] text-ink-500">{entry.action} by {entry.assigned_by_name ?? "System"} · {formatDateTime(entry.created_at)}</p></div>)}</div>
+              </details>
+            )}
+          </div>
+        </section>
       )}
 
       {activeTab === "notes" && (
@@ -443,11 +487,57 @@ function CompactRow({ label, value, emphasis }: { label: string; value: string; 
   return <div className="flex items-start justify-between gap-4 py-3"><dt className="text-xs text-ink-500">{label}</dt><dd className={`max-w-[58%] text-right text-xs font-semibold leading-relaxed ${emphasis ? "text-danger" : "text-ink-800"}`}>{value}</dd></div>;
 }
 
-function ActivityTimeline({ activity, isLoading, activeCallbackAt }: { activity: LeadActivityOut[]; isLoading: boolean; activeCallbackAt: string | null }) {
+function ActivityTimeline({ activity, isLoading, activeCallbackAt, expandedEventIds, onToggleEvent }: { activity: LeadActivityOut[]; isLoading: boolean; activeCallbackAt: string | null; expandedEventIds: Set<string>; onToggleEvent: (eventId: string) => void }) {
   if (isLoading) return <p className="mt-5 text-sm text-ink-500">Loading activity…</p>;
-  if (!activity.length) return <p className="mt-5 rounded-[10px] border border-dashed border-ink-100 px-4 py-7 text-center text-sm text-ink-500">No activity has been recorded for this lead yet.</p>;
+  if (!activity.length) return <p className="rounded-[10px] border border-dashed border-ink-100 px-4 py-7 text-center text-sm text-ink-500">No matching activity has been recorded for this lead yet.</p>;
   const activeCallbackTime = activeCallbackAt ? new Date(activeCallbackAt).getTime() : null;
-  return <ol className="mt-6">{activity.map((event, index) => { const isLast = index === activity.length - 1; const EventIcon = event.event_type === "call" ? PhoneCall : event.event_type === "assignment" ? UserRound : Activity; const eventCallbackTime = event.next_follow_up_at ? new Date(event.next_follow_up_at).getTime() : null; const currentCallback = eventCallbackTime != null && eventCallbackTime === activeCallbackTime; return <li key={`${event.event_type}-${event.id}`} className="flex gap-3"><div className="flex flex-col items-center"><span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${index === 0 ? "bg-primary text-white shadow-[0_0_0_4px_rgba(23,58,94,0.10)]" : "bg-primary-soft text-primary"}`}><EventIcon size={14} /></span>{!isLast && <span className="my-1.5 w-px flex-1 bg-ink-100" />}</div><div className={`min-w-0 flex-1 ${isLast ? "pb-0" : "pb-6"}`}><div className="flex flex-wrap items-center gap-2"><p className="text-sm font-semibold text-ink-800">{event.title}</p>{event.call_outcome && <StatusBadge status={event.call_outcome} />}{event.order_value != null && <span className="badge bg-success/10 text-success">{formatCurrencyFull(event.order_value)}</span>}</div><p className="mt-1 text-xs text-ink-500">{formatDateTime(event.occurred_at)} · {timeAgo(event.occurred_at)} · {event.actor_name ?? "System"}</p>{event.body && <p className="mt-2 border-l-2 border-ink-100 pl-3 text-sm leading-relaxed text-ink-700 whitespace-pre-wrap">{event.body}</p>}{event.next_follow_up_at && <p className={`mt-2 flex items-start gap-1.5 text-xs ${currentCallback ? "text-warning" : "text-ink-400"}`}><CalendarClock size={12} className="mt-0.5 shrink-0" /> Callback set for {formatCallbackTime(event.next_follow_up_at)}{!currentCallback && " · replaced later"}</p>}</div></li>; })}</ol>;
+  const groupedActivity = groupActivityByDate(activity);
+
+  return (
+    <div className="space-y-6">
+      {groupedActivity.map((group) => (
+        <section key={group.key}>
+          <div className="mb-4 flex items-center gap-3"><span className="rounded-[6px] border border-ink-100 bg-[#FBFBF8] px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.08em] text-ink-600">{group.label}</span><span className="h-px flex-1 bg-ink-100" /></div>
+          <ol className="space-y-0">
+            {group.events.map((event, index) => {
+              const isLast = index === group.events.length - 1;
+              const EventIcon = event.event_type === "call" ? PhoneCall : event.event_type === "assignment" ? UserRound : event.event_type === "note" ? FileText : event.event_type === "task" ? CalendarClock : Activity;
+              const eventCallbackTime = event.next_follow_up_at ? new Date(event.next_follow_up_at).getTime() : null;
+              const currentCallback = eventCallbackTime != null && eventCallbackTime === activeCallbackTime;
+              const eventKey = `${event.event_type}-${event.id}`;
+              const isExpanded = expandedEventIds.has(eventKey);
+              const eventTime = new Intl.DateTimeFormat("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }).format(new Date(event.occurred_at));
+
+              return (
+                <li key={eventKey} className="grid grid-cols-[58px_28px_minmax(0,1fr)] gap-x-3 sm:grid-cols-[78px_32px_minmax(0,1fr)]">
+                  <time dateTime={event.occurred_at} className="pt-1 text-right text-[11px] font-semibold tabular-nums text-ink-500">{eventTime}</time>
+                  <div className="flex flex-col items-center"><span className={`z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border ${event.event_type === "call" ? "border-success/25 bg-success/10 text-success" : event.event_type === "assignment" ? "border-primary/20 bg-primary-soft text-primary" : event.event_type === "note" ? "border-accent/30 bg-accent/10 text-accent-dark" : "border-ink-100 bg-[#FBFBF8] text-ink-500"}`}><EventIcon size={13} /></span>{!isLast && <span className="min-h-8 flex-1 border-l border-ink-100" />}</div>
+                  <div className={`min-w-0 ${isLast ? "pb-0" : "pb-6"}`}>
+                    <div className="flex flex-wrap items-center gap-2"><p className="text-sm font-semibold text-ink-800">{event.title}</p>{event.call_outcome && <StatusBadge status={event.call_outcome} />}{event.order_value != null && <span className="badge bg-success/10 text-success">{formatCurrencyFull(event.order_value)}</span>}</div>
+                    <p className="mt-1 text-xs text-ink-500">by {event.actor_name ?? "System"} · {timeAgo(event.occurred_at)}</p>
+                    {event.body && <div className="mt-2"><button type="button" onClick={() => onToggleEvent(eventKey)} className="text-xs font-semibold text-primary hover:underline">{isExpanded ? "Hide details" : "View details"}</button>{isExpanded && <p className="mt-2 rounded-r-[7px] border-l-2 border-primary/25 bg-primary-soft/35 px-3 py-2.5 text-sm leading-relaxed text-ink-700 whitespace-pre-wrap">{event.body}</p>}</div>}
+                    {event.next_follow_up_at && <p className={`mt-2 flex items-start gap-1.5 text-xs ${currentCallback ? "text-warning" : "text-ink-400"}`}><CalendarClock size={12} className="mt-0.5 shrink-0" /> Callback set for {formatCallbackTime(event.next_follow_up_at)}{!currentCallback && " · replaced later"}</p>}
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function groupActivityByDate(activity: LeadActivityOut[]) {
+  const groups = new Map<string, { key: string; label: string; events: LeadActivityOut[] }>();
+  for (const event of activity) {
+    const date = new Date(event.occurred_at);
+    const key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+    const existing = groups.get(key);
+    if (existing) existing.events.push(event);
+    else groups.set(key, { key, label: new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" }).format(date), events: [event] });
+  }
+  return Array.from(groups.values());
 }
 
 function LeadRecordLoading({ onBack }: { onBack: () => void }) {
