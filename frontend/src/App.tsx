@@ -15,6 +15,8 @@ import { LostDealsPage } from "@/pages/app/LostDeals";
 import { IntegrationsPage } from "@/pages/app/Integrations";
 import { TeamPage } from "@/pages/app/Team";
 import { AnalyticsPage } from "@/pages/app/Analytics";
+import { AttendancePage } from "@/pages/app/Attendance";
+import { PayrollPage } from "@/pages/app/Payroll";
 import { SuperAdminShell } from "@/pages/super-admin/SuperAdminShell";
 import { OrganizationsPage } from "@/pages/super-admin/Organizations";
 
@@ -80,8 +82,17 @@ export function App() {
         <Route path="/leads" element={<LeadsPage />} />
         <Route path="/leads/:leadId" element={<LeadDetailsPage />} />
         <Route path="/follow-ups" element={<FollowUpsPage />} />
-      <Route path="/tasks" element={<TasksPage />} />
-      <Route path="/workspace-settings" element={<WorkspaceSettingsPage />} />
+        <Route path="/attendance" element={<AttendancePage />} />
+        <Route
+          path="/payroll"
+          element={
+            <ProtectedRoute roles={["admin"]}>
+              <PayrollPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="/tasks" element={<TasksPage />} />
+        <Route path="/workspace-settings" element={<WorkspaceSettingsPage />} />
         <Route
           path="/lost-deals"
           element={

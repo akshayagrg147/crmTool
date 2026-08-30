@@ -13,6 +13,7 @@ from app.models.audit import AuditEvent
 from app.models.lead_note import LeadAttachment, LeadNote
 from app.models.saved_report import SavedReport
 from app.models.backup import BackupRecord
+from app.models.payroll import EmployeePayrollProfile, LeaveRequest, TimeEntry
 
 __all__ = [
     "Organization",
@@ -32,4 +33,7 @@ __all__ = [
     "LeadAttachment",
     "SavedReport",
     "BackupRecord",
+    "EmployeePayrollProfile",
+    "TimeEntry",
+    "LeaveRequest",
 ]

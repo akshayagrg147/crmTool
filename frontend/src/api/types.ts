@@ -90,6 +90,84 @@ export interface UserOut {
   is_active: boolean;
 }
 
+export type TimeEntryCategory = "calling" | "event" | "training" | "admin" | "other";
+export type TimeEntryStatus = "pending" | "approved" | "rejected";
+export type LeaveStatus = "pending" | "approved" | "rejected";
+
+export interface PayrollTimeEntry {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  user_name: string | null;
+  entry_date: string;
+  hours: number;
+  category: TimeEntryCategory;
+  description: string | null;
+  status: TimeEntryStatus;
+  submitted_by: string | null;
+  submitted_by_name: string | null;
+  reviewed_by: string | null;
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+}
+
+export interface LeaveRequest {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  user_name: string | null;
+  start_date: string;
+  end_date: string;
+  leave_type: "casual" | "sick" | "planned" | "personal" | "other";
+  reason: string;
+  status: LeaveStatus;
+  reviewed_by: string | null;
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
+  created_at: string;
+}
+
+export interface PayrollEmployee {
+  user_id: string;
+  name: string;
+  phone: string;
+  role: UserRole;
+  is_active: boolean;
+  hourly_rate: number;
+  standard_hours_per_day: number;
+  target_hours: number;
+  approved_hours: number;
+  pending_hours: number;
+  leave_days: number;
+  estimated_pay: number;
+  entries: PayrollTimeEntry[];
+  leaves: LeaveRequest[];
+}
+
+export interface PayrollSummary {
+  month: string;
+  employees: PayrollEmployee[];
+  total_target_hours: number;
+  total_approved_hours: number;
+  total_pending_hours: number;
+  total_leave_days: number;
+  total_estimated_pay: number;
+}
+
+export interface AttendanceOverview {
+  month: string;
+  entries: PayrollTimeEntry[];
+  leaves: LeaveRequest[];
+  pending_approvals: number;
+}
+
+export interface AttendanceApprovals {
+  time_entries: PayrollTimeEntry[];
+  leaves: LeaveRequest[];
+}
+
 export interface TeamMemberOut extends UserOut {
   created_at: string;
   active_leads_count: number;

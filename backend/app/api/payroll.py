@@ -1,0 +1,452 @@
+import uuid
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.database import get_db
+from app.core.deps import CurrentUser, require_admin, require_admin_or_manager, require_org_user
+from app.models.payroll import EmployeePayrollProfile, LeaveRequest, TimeEntry
+from app.models.user import User, UserRole
+from app.schemas.payroll import (
+    AttendanceApprovalsOut,
+    AttendanceOverviewOut,
+    LeaveRequestCreate,
+    LeaveRequestOut,
+    LeaveRequestReview,
+    PayrollEmployeeOut,
+    PayrollRateOut,
+    PayrollRateUpdate,
+    PayrollSummaryOut,
+    TimeEntryCreate,
+    TimeEntryOut,
+    TimeEntryReview,
+)
+
+payroll_router = APIRouter(prefix="/payroll", tags=["payroll"])
+attendance_router = APIRouter(prefix="/attendance", tags=["attendance"])
+
+
+def _month_window(month: str | None) -> tuple[str, date, date]:
+    value = month or datetime.now(timezone.utc).strftime("%Y-%m")
+    try:
+        parsed = datetime.strptime(value, "%Y-%m")
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Month must use YYYY-MM format") from exc
+    start = parsed.date().replace(day=1)
+    if start.month == 12:
+        end = date(start.year + 1, 1, 1)
+    else:
+        end = date(start.year, start.month + 1, 1)
+    return value, start, end
+
+
+def _working_days(start: date, end: date) -> int:
+    total = 0
+    cursor = start
+    while cursor < end:
+        if cursor.weekday() < 5:
+            total += 1
+        cursor += timedelta(days=1)
+    return total
+
+
+def _overlap_working_days(start: date, end: date, window_start: date, window_end: date) -> int:
+    left = max(start, window_start)
+    right = min(end, window_end - timedelta(days=1))
+    if right < left:
+        return 0
+    return _working_days(left, right + timedelta(days=1))
+
+
+def _decimal(value: object | None) -> Decimal:
+    return Decimal(str(value or 0))
+
+
+def _role_can_review(current: CurrentUser, target: User) -> bool:
+    return current.role == UserRole.admin or (current.role == UserRole.manager and target.role == UserRole.telecaller)
+
+
+def _time_out(entry: TimeEntry, users: dict[uuid.UUID, User]) -> TimeEntryOut:
+    user = users.get(entry.user_id)
+    submitted_by = users.get(entry.submitted_by) if entry.submitted_by else None
+    reviewed_by = users.get(entry.reviewed_by) if entry.reviewed_by else None
+    return TimeEntryOut(
+        id=entry.id,
+        organization_id=entry.organization_id,
+        user_id=entry.user_id,
+        user_name=user.name if user else None,
+        entry_date=entry.entry_date,
+        hours=float(entry.hours or 0),
+        category=entry.category,
+        description=entry.description,
+        status=entry.status,
+        submitted_by=entry.submitted_by,
+        submitted_by_name=submitted_by.name if submitted_by else None,
+        reviewed_by=entry.reviewed_by,
+        reviewed_by_name=reviewed_by.name if reviewed_by else None,
+        reviewed_at=entry.reviewed_at,
+        created_at=entry.created_at,
+    )
+
+
+def _leave_out(request: LeaveRequest, users: dict[uuid.UUID, User]) -> LeaveRequestOut:
+    user = users.get(request.user_id)
+    reviewer = users.get(request.reviewed_by) if request.reviewed_by else None
+    return LeaveRequestOut(
+        id=request.id,
+        organization_id=request.organization_id,
+        user_id=request.user_id,
+        user_name=user.name if user else None,
+        start_date=request.start_date,
+        end_date=request.end_date,
+        leave_type=request.leave_type,
+        reason=request.reason,
+        status=request.status,
+        reviewed_by=request.reviewed_by,
+        reviewed_by_name=reviewer.name if reviewer else None,
+        reviewed_at=request.reviewed_at,
+        review_note=request.review_note,
+        created_at=request.created_at,
+    )
+
+
+async def _org_users(db: AsyncSession, organization_id: uuid.UUID) -> list[User]:
+    result = await db.execute(
+        select(User).where(User.organization_id == organization_id).order_by(User.created_at, User.name)
+    )
+    return list(result.scalars().all())
+
+
+@payroll_router.get("", response_model=PayrollSummaryOut)
+async def payroll_summary(
+    month: str | None = Query(default=None),
+    current: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    month_value, month_start, month_end = _month_window(month)
+    users = [user for user in await _org_users(db, current.organization_id) if user.role != UserRole.super_admin]
+    user_ids = [user.id for user in users]
+    profiles_result = await db.execute(
+        select(EmployeePayrollProfile).where(
+            EmployeePayrollProfile.organization_id == current.organization_id,
+            EmployeePayrollProfile.user_id.in_(user_ids) if user_ids else False,
+        )
+    )
+    profiles = {profile.user_id: profile for profile in profiles_result.scalars().all()}
+    entries_result = await db.execute(
+        select(TimeEntry).where(
+            TimeEntry.organization_id == current.organization_id,
+            TimeEntry.entry_date >= month_start,
+            TimeEntry.entry_date < month_end,
+            TimeEntry.user_id.in_(user_ids) if user_ids else False,
+        ).order_by(TimeEntry.entry_date.desc(), TimeEntry.created_at.desc())
+    )
+    entries = list(entries_result.scalars().all())
+    leaves_result = await db.execute(
+        select(LeaveRequest).where(
+            LeaveRequest.organization_id == current.organization_id,
+            LeaveRequest.start_date < month_end,
+            LeaveRequest.end_date >= month_start,
+            LeaveRequest.user_id.in_(user_ids) if user_ids else False,
+        ).order_by(LeaveRequest.start_date.desc(), LeaveRequest.created_at.desc())
+    )
+    leaves = list(leaves_result.scalars().all())
+    all_users = {user.id: user for user in await _org_users(db, current.organization_id)}
+    entries_by_user: dict[uuid.UUID, list[TimeEntry]] = {user_id: [] for user_id in user_ids}
+    leaves_by_user: dict[uuid.UUID, list[LeaveRequest]] = {user_id: [] for user_id in user_ids}
+    for entry in entries:
+        entries_by_user.setdefault(entry.user_id, []).append(entry)
+    for leave in leaves:
+        leaves_by_user.setdefault(leave.user_id, []).append(leave)
+
+    target_days = _working_days(month_start, month_end)
+    employee_rows: list[PayrollEmployeeOut] = []
+    total_target = Decimal("0")
+    total_approved = Decimal("0")
+    total_pending = Decimal("0")
+    total_leaves = Decimal("0")
+    total_pay = Decimal("0")
+    for user in users:
+        profile = profiles.get(user.id)
+        hourly_rate = _decimal(profile.hourly_rate if profile else 0)
+        standard_hours = _decimal(profile.standard_hours_per_day if profile else 8)
+        user_entries = entries_by_user.get(user.id, [])
+        user_leaves = leaves_by_user.get(user.id, [])
+        approved_hours = sum((_decimal(entry.hours) for entry in user_entries if entry.status == "approved"), Decimal("0"))
+        pending_hours = sum((_decimal(entry.hours) for entry in user_entries if entry.status == "pending"), Decimal("0"))
+        leave_days = sum(
+            (_overlap_working_days(leave.start_date, leave.end_date, month_start, month_end) for leave in user_leaves if leave.status == "approved"),
+            0,
+        )
+        target_hours = Decimal(target_days) * standard_hours
+        estimated_pay = approved_hours * hourly_rate
+        total_target += target_hours
+        total_approved += approved_hours
+        total_pending += pending_hours
+        total_leaves += Decimal(leave_days)
+        total_pay += estimated_pay
+        employee_rows.append(
+            PayrollEmployeeOut(
+                user_id=user.id,
+                name=user.name,
+                phone=user.phone,
+                role=user.role,
+                is_active=user.is_active,
+                hourly_rate=float(hourly_rate),
+                standard_hours_per_day=float(standard_hours),
+                target_hours=float(target_hours),
+                approved_hours=float(approved_hours),
+                pending_hours=float(pending_hours),
+                leave_days=float(leave_days),
+                estimated_pay=float(estimated_pay),
+                entries=[_time_out(entry, all_users) for entry in user_entries],
+                leaves=[_leave_out(leave, all_users) for leave in user_leaves],
+            )
+        )
+    return PayrollSummaryOut(
+        month=month_value,
+        employees=employee_rows,
+        total_target_hours=float(total_target),
+        total_approved_hours=float(total_approved),
+        total_pending_hours=float(total_pending),
+        total_leave_days=float(total_leaves),
+        total_estimated_pay=float(total_pay),
+    )
+
+
+@payroll_router.put("/employees/{user_id}", response_model=PayrollRateOut)
+async def update_payroll_rate(
+    user_id: uuid.UUID,
+    payload: PayrollRateUpdate,
+    current: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    user_result = await db.execute(
+        select(User).where(User.id == user_id, User.organization_id == current.organization_id)
+    )
+    user = user_result.scalar_one_or_none()
+    if user is None or user.role == UserRole.super_admin:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Employee not found")
+    result = await db.execute(
+        select(EmployeePayrollProfile).where(
+            EmployeePayrollProfile.organization_id == current.organization_id,
+            EmployeePayrollProfile.user_id == user_id,
+        )
+    )
+    profile = result.scalar_one_or_none()
+    if profile is None:
+        profile = EmployeePayrollProfile(organization_id=current.organization_id, user_id=user_id)
+        db.add(profile)
+    profile.hourly_rate = payload.hourly_rate
+    profile.standard_hours_per_day = payload.standard_hours_per_day
+    await db.commit()
+    return PayrollRateOut(user_id=user_id, hourly_rate=payload.hourly_rate, standard_hours_per_day=payload.standard_hours_per_day)
+
+
+@attendance_router.get("", response_model=AttendanceOverviewOut)
+async def attendance_overview(
+    month: str | None = Query(default=None),
+    current: CurrentUser = Depends(require_org_user),
+    db: AsyncSession = Depends(get_db),
+):
+    month_value, month_start, month_end = _month_window(month)
+    users = await _org_users(db, current.organization_id)
+    user_map = {user.id: user for user in users}
+    entries_result = await db.execute(
+        select(TimeEntry).where(
+            TimeEntry.organization_id == current.organization_id,
+            TimeEntry.user_id == current.id,
+            TimeEntry.entry_date >= month_start,
+            TimeEntry.entry_date < month_end,
+        ).order_by(TimeEntry.entry_date.desc(), TimeEntry.created_at.desc())
+    )
+    leaves_result = await db.execute(
+        select(LeaveRequest).where(
+            LeaveRequest.organization_id == current.organization_id,
+            LeaveRequest.user_id == current.id,
+            LeaveRequest.start_date < month_end,
+            LeaveRequest.end_date >= month_start,
+        ).order_by(LeaveRequest.start_date.desc(), LeaveRequest.created_at.desc())
+    )
+    pending_count = 0
+    if current.role in (UserRole.admin, UserRole.manager):
+        pending_entries_result = await db.execute(
+            select(TimeEntry).where(
+                TimeEntry.organization_id == current.organization_id,
+                TimeEntry.status == "pending",
+                TimeEntry.entry_date >= month_start,
+                TimeEntry.entry_date < month_end,
+            )
+        )
+        pending_leaves_result = await db.execute(
+            select(LeaveRequest).where(
+                LeaveRequest.organization_id == current.organization_id,
+                LeaveRequest.status == "pending",
+                LeaveRequest.start_date < month_end,
+                LeaveRequest.end_date >= month_start,
+            )
+        )
+        pending_count = sum(
+            1
+            for entry in pending_entries_result.scalars().all()
+            if current.role == UserRole.admin
+            or (user_map.get(entry.user_id) and user_map[entry.user_id].role == UserRole.telecaller)
+        )
+        pending_count += sum(
+            1
+            for leave in pending_leaves_result.scalars().all()
+            if current.role == UserRole.admin
+            or (user_map.get(leave.user_id) and user_map[leave.user_id].role == UserRole.telecaller)
+        )
+    return AttendanceOverviewOut(
+        month=month_value,
+        entries=[_time_out(entry, user_map) for entry in entries_result.scalars().all()],
+        leaves=[_leave_out(leave, user_map) for leave in leaves_result.scalars().all()],
+        pending_approvals=pending_count,
+    )
+
+
+@attendance_router.get("/approvals", response_model=AttendanceApprovalsOut)
+async def attendance_approvals(
+    month: str | None = Query(default=None),
+    current: CurrentUser = Depends(require_admin_or_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    _month_value, month_start, month_end = _month_window(month)
+    users = await _org_users(db, current.organization_id)
+    user_map = {user.id: user for user in users}
+    entries_result = await db.execute(
+        select(TimeEntry).where(
+            TimeEntry.organization_id == current.organization_id,
+            TimeEntry.status == "pending",
+            TimeEntry.entry_date >= month_start,
+            TimeEntry.entry_date < month_end,
+        ).order_by(TimeEntry.entry_date.asc(), TimeEntry.created_at.asc())
+    )
+    leaves_result = await db.execute(
+        select(LeaveRequest).where(
+            LeaveRequest.organization_id == current.organization_id,
+            LeaveRequest.status == "pending",
+            LeaveRequest.start_date < month_end,
+            LeaveRequest.end_date >= month_start,
+        ).order_by(LeaveRequest.start_date.asc(), LeaveRequest.created_at.asc())
+    )
+    entries = [entry for entry in entries_result.scalars().all() if current.role == UserRole.admin or (user_map.get(entry.user_id) and user_map[entry.user_id].role == UserRole.telecaller)]
+    leaves = [leave for leave in leaves_result.scalars().all() if current.role == UserRole.admin or (user_map.get(leave.user_id) and user_map[leave.user_id].role == UserRole.telecaller)]
+    return AttendanceApprovalsOut(
+        time_entries=[_time_out(entry, user_map) for entry in entries],
+        leaves=[_leave_out(leave, user_map) for leave in leaves],
+    )
+
+
+@attendance_router.post("/time-entries", response_model=TimeEntryOut, status_code=status.HTTP_201_CREATED)
+async def create_time_entry(
+    payload: TimeEntryCreate,
+    current: CurrentUser = Depends(require_org_user),
+    db: AsyncSession = Depends(get_db),
+):
+    target_id = payload.user_id or current.id
+    target_result = await db.execute(select(User).where(User.id == target_id, User.organization_id == current.organization_id))
+    target = target_result.scalar_one_or_none()
+    if target is None or target.role == UserRole.super_admin:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Employee not found")
+    if target_id != current.id and current.role != UserRole.admin:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only admins can record time for another employee")
+    entry = TimeEntry(
+        organization_id=current.organization_id,
+        user_id=target_id,
+        entry_date=payload.entry_date,
+        hours=payload.hours,
+        category=payload.category,
+        description=payload.description,
+        status=payload.status if current.role == UserRole.admin else "pending",
+        submitted_by=current.id,
+    )
+    db.add(entry)
+    await db.commit()
+    await db.refresh(entry)
+    users = {user.id: user for user in await _org_users(db, current.organization_id)}
+    return _time_out(entry, users)
+
+
+@attendance_router.patch("/time-entries/{entry_id}", response_model=TimeEntryOut)
+async def review_time_entry(
+    entry_id: uuid.UUID,
+    payload: TimeEntryReview,
+    current: CurrentUser = Depends(require_admin_or_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(TimeEntry).where(TimeEntry.id == entry_id, TimeEntry.organization_id == current.organization_id))
+    entry = result.scalar_one_or_none()
+    if entry is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Time entry not found")
+    target_result = await db.execute(select(User).where(User.id == entry.user_id, User.organization_id == current.organization_id))
+    target = target_result.scalar_one_or_none()
+    if target is None or not _role_can_review(current, target):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "You can only review telecaller time entries")
+    entry.status = payload.status
+    entry.reviewed_by = current.id
+    entry.reviewed_at = None if payload.status == "pending" else datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(entry)
+    users = {user.id: user for user in await _org_users(db, current.organization_id)}
+    return _time_out(entry, users)
+
+
+@attendance_router.post("/leave-requests", response_model=LeaveRequestOut, status_code=status.HTTP_201_CREATED)
+async def create_leave_request(
+    payload: LeaveRequestCreate,
+    current: CurrentUser = Depends(require_org_user),
+    db: AsyncSession = Depends(get_db),
+):
+    target_id = payload.user_id or current.id
+    target_result = await db.execute(select(User).where(User.id == target_id, User.organization_id == current.organization_id))
+    target = target_result.scalar_one_or_none()
+    if target is None or target.role == UserRole.super_admin:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Employee not found")
+    if target_id != current.id and current.role != UserRole.admin:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only admins can create leave for another employee")
+    if payload.end_date < payload.start_date:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "End date cannot be before start date")
+    request = LeaveRequest(
+        organization_id=current.organization_id,
+        user_id=target_id,
+        start_date=payload.start_date,
+        end_date=payload.end_date,
+        leave_type=payload.leave_type,
+        reason=payload.reason,
+        status="pending",
+    )
+    db.add(request)
+    await db.commit()
+    await db.refresh(request)
+    users = {user.id: user for user in await _org_users(db, current.organization_id)}
+    return _leave_out(request, users)
+
+
+@attendance_router.patch("/leave-requests/{request_id}", response_model=LeaveRequestOut)
+async def review_leave_request(
+    request_id: uuid.UUID,
+    payload: LeaveRequestReview,
+    current: CurrentUser = Depends(require_admin_or_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(LeaveRequest).where(LeaveRequest.id == request_id, LeaveRequest.organization_id == current.organization_id))
+    request = result.scalar_one_or_none()
+    if request is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Leave request not found")
+    target_result = await db.execute(select(User).where(User.id == request.user_id, User.organization_id == current.organization_id))
+    target = target_result.scalar_one_or_none()
+    if target is None or not _role_can_review(current, target):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "You can only review telecaller leave requests")
+    request.status = payload.status
+    request.reviewed_by = current.id
+    request.reviewed_at = None if payload.status == "pending" else datetime.now(timezone.utc)
+    request.review_note = payload.review_note.strip() if payload.review_note else None
+    await db.commit()
+    await db.refresh(request)
+    users = {user.id: user for user in await _org_users(db, current.organization_id)}
+    return _leave_out(request, users)

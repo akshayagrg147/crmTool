@@ -55,7 +55,7 @@ source venv/bin/activate
 python -m pytest -q
 ```
 
-Covers: round-robin distribution + concurrency race-safety, last-admin-removal guards, and cross-org data isolation.
+Covers: round-robin distribution + concurrency race-safety, last-admin-removal guards, cross-org data isolation, and payroll/attendance role boundaries.
 
 ## 3. Frontend setup
 
@@ -79,7 +79,7 @@ The web app is now live at `http://localhost:5173`.
 ```
 /backend
   /app
-    /api        auth, users, leads, calls, analytics, super_admin
+    /api        auth, users, leads, calls, analytics, attendance, payroll, super_admin
     /models     SQLAlchemy models
     /schemas    Pydantic v2 schemas
     /services   distribution engine (round-robin, row-locked)
@@ -91,7 +91,7 @@ The web app is now live at `http://localhost:5173`.
   seed.py
 /frontend
   /src
-    /pages/app          Dashboard, Leads, Team, Analytics
+    /pages/app          Dashboard, Leads, Team, Analytics, Attendance, Payroll
     /pages/super-admin   Organizations
     /components
     /api                axios client + endpoint wrappers
@@ -105,6 +105,8 @@ The web app is now live at `http://localhost:5173`.
 - Lead distribution is round-robin across **active** telecallers only, with the rotation pointer persisted per-org and row-locked (`SELECT ... FOR UPDATE`) so concurrent lead creation can't double-assign.
 - Telecallers can reassign only their own leads, and only to an active Manager in the same organization. Admins and Managers retain their existing reassignment controls.
 - Telecallers can mark a lead as Lost with a required reason and manager handoff; Admins and Managers can review the resulting Lost Deals table and filter it by reporting telecaller.
+- Attendance and payroll are separated by role: every employee can submit work-time and leave requests, Managers can approve telecaller requests, and Admins can set each employee's hourly rate and calculate approved-hours pay in the private Payroll workspace. Logged calls are captured automatically as approved calling time; extra categories such as events, training, and admin work can be logged separately.
+- Payroll uses a weekday target (8 hours per day by default) and calculates estimated pay from approved hours only. Pending and rejected submissions are excluded, while approved leave days are shown alongside each employee's monthly totals.
 - Real telephony, billing, and Firebase/BaaS integrations are intentionally out of scope for this phase.
 
 ## Production deployment

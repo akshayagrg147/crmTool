@@ -19,6 +19,8 @@ import {
   ArchiveX,
   ShieldCheck,
   SlidersHorizontal,
+  CalendarClock,
+  Wallet,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { BrandLogo } from "@/components/BrandMark";
@@ -33,6 +35,8 @@ const navItems = [
   { to: "/lost-deals", label: "Lost Deals", icon: ArchiveX, section: "Operations", roles: ["admin", "manager"] },
   { to: "/team", label: "Team", icon: Users2, section: "Operations", roles: ["admin", "manager"] },
   { to: "/integrations", label: "Lead Sources", icon: Plug, section: "Operations", roles: ["admin", "manager"] },
+  { to: "/attendance", label: "My Time & Leave", icon: CalendarClock, section: "Operations", roles: ["admin", "manager", "telecaller"] },
+  { to: "/payroll", label: "Payroll", icon: Wallet, section: "Operations", roles: ["admin"] },
   { to: "/workspace-settings", label: "Workspace Controls", icon: SlidersHorizontal, section: "Operations", roles: ["admin", "manager", "telecaller"] },
   { to: "/analytics", label: "Analytics", icon: BarChart3, section: "Intelligence", roles: ["admin", "manager", "telecaller"] },
 ];

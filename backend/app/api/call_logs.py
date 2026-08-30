@@ -12,6 +12,7 @@ from app.models.call_log import CallLog
 from app.models.lead import Lead, LeadStatus
 from app.models.lead_assignment import LeadAssignmentHistory
 from app.models.lead_note import LeadNote
+from app.models.payroll import TimeEntry
 from app.models.task import Task
 from app.models.user import UserRole
 from app.schemas.activity import LeadActivityOut
@@ -46,6 +47,7 @@ async def log_call(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Not your lead")
 
     next_follow_up_at = payload.next_follow_up_at if payload.outcome == LeadStatus.follow_up else None
+    now = datetime.now(timezone.utc)
 
     call = CallLog(
         lead_id=lead.id,
@@ -57,8 +59,26 @@ async def log_call(
         next_follow_up_at=next_follow_up_at,
     )
     db.add(call)
+    # A logged call is already an authenticated, completed piece of work. Keep
+    # it in the attendance ledger as approved calling time so payroll reflects
+    # real talk time without requiring the telecaller to enter it twice.
+    if payload.duration_minutes > 0:
+        db.add(
+            TimeEntry(
+                organization_id=current.organization_id,
+                user_id=current.id,
+                entry_date=now.date(),
+                hours=round(float(payload.duration_minutes) / 60, 2),
+                category="calling",
+                description=f"Call with {lead.name}",
+                status="approved",
+                submitted_by=current.id,
+                reviewed_by=current.id,
+                reviewed_at=now,
+            )
+        )
     lead.status = payload.outcome
-    lead.last_contacted_at = datetime.now(timezone.utc)
+    lead.last_contacted_at = now
     lead.next_follow_up_at = next_follow_up_at
     record_audit(
         db,

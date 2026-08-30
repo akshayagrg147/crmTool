@@ -43,6 +43,13 @@ import type {
   LeadAttachmentOut,
   UserOut,
   UserRole,
+  AttendanceApprovals,
+  AttendanceOverview,
+  LeaveRequest,
+  PayrollSummary,
+  PayrollTimeEntry,
+  TimeEntryCategory,
+  TimeEntryStatus,
 } from "./types";
 
 export interface TokenPair {
@@ -237,6 +244,30 @@ export const securityApi = {
   twoFactorSetup: () => apiClient.post<{ secret: string; otpauth_url: string }>("/security/2fa/setup").then((r) => r.data),
   twoFactorEnable: (code: string) => apiClient.post<{ enabled: boolean }>("/security/2fa/enable", null, { params: { code } }).then((r) => r.data),
   twoFactorDisable: (code: string) => apiClient.post<{ enabled: boolean }>("/security/2fa/disable", null, { params: { code } }).then((r) => r.data),
+};
+
+export const payrollApi = {
+  summary: (month: string) => apiClient.get<PayrollSummary>("/payroll", { params: { month } }).then((r) => r.data),
+  updateRate: (userId: string, payload: { hourly_rate: number; standard_hours_per_day: number }) =>
+    apiClient.put(`/payroll/employees/${userId}`, payload).then((r) => r.data),
+};
+
+export const attendanceApi = {
+  overview: (month: string) => apiClient.get<AttendanceOverview>("/attendance", { params: { month } }).then((r) => r.data),
+  approvals: (month: string) => apiClient.get<AttendanceApprovals>("/attendance/approvals", { params: { month } }).then((r) => r.data),
+  createTimeEntry: (payload: {
+    user_id?: string;
+    entry_date: string;
+    hours: number;
+    category: TimeEntryCategory;
+    description?: string;
+    status?: TimeEntryStatus;
+  }) => apiClient.post<PayrollTimeEntry>("/attendance/time-entries", payload).then((r) => r.data),
+  reviewTimeEntry: (id: string, status: TimeEntryStatus) => apiClient.patch<PayrollTimeEntry>(`/attendance/time-entries/${id}`, { status }).then((r) => r.data),
+  createLeave: (payload: { user_id?: string; start_date: string; end_date: string; leave_type: LeaveRequest["leave_type"]; reason: string }) =>
+    apiClient.post<LeaveRequest>("/attendance/leave-requests", payload).then((r) => r.data),
+  reviewLeave: (id: string, status: LeaveRequest["status"], review_note?: string) =>
+    apiClient.patch<LeaveRequest>(`/attendance/leave-requests/${id}`, { status, review_note }).then((r) => r.data),
 };
 
 export interface FollowUpFilters {

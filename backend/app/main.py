@@ -11,6 +11,7 @@ from app.api import (
     leads,
     lost_deals,
     organization,
+    payroll,
     notes,
     security,
     super_admin,
@@ -50,6 +51,8 @@ app.include_router(tasks.router, prefix="/api")
 app.include_router(notes.router, prefix="/api")
 app.include_router(security.router, prefix="/api")
 app.include_router(workspace.router, prefix="/api")
+app.include_router(payroll.payroll_router, prefix="/api")
+app.include_router(payroll.attendance_router, prefix="/api")
 
 
 @app.on_event("startup")
