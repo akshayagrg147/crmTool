@@ -8,7 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import CurrentUser, require_admin, require_admin_or_manager, require_org_user
-from app.models.payroll import EmployeePayrollProfile, LeaveRequest, TimeEntry
+from app.models.payroll import (
+    EmployeePayrollProfile,
+    LeaveRequest,
+    OrganizationScheduleException,
+    OrganizationWorkSchedule,
+    TimeEntry,
+)
 from app.models.user import User, UserRole
 from app.schemas.payroll import (
     AttendanceApprovalsOut,
@@ -19,6 +25,10 @@ from app.schemas.payroll import (
     PayrollEmployeeOut,
     PayrollRateOut,
     PayrollRateUpdate,
+    PayrollScheduleExceptionCreate,
+    PayrollScheduleExceptionOut,
+    PayrollScheduleOut,
+    PayrollScheduleUpdate,
     PayrollSummaryOut,
     TimeEntryCreate,
     TimeEntryOut,
@@ -43,22 +53,44 @@ def _month_window(month: str | None) -> tuple[str, date, date]:
     return value, start, end
 
 
-def _working_days(start: date, end: date) -> int:
+DEFAULT_WORKING_DAYS = frozenset({0, 1, 2, 3, 4})
+
+
+def _scheduled_days(
+    start: date,
+    end: date,
+    working_days: set[int] | frozenset[int] = DEFAULT_WORKING_DAYS,
+    exceptions: dict[date, bool] | None = None,
+) -> int:
+    overrides = exceptions or {}
     total = 0
     cursor = start
     while cursor < end:
-        if cursor.weekday() < 5:
+        is_working = overrides.get(cursor, cursor.weekday() in working_days)
+        if is_working:
             total += 1
         cursor += timedelta(days=1)
     return total
 
 
-def _overlap_working_days(start: date, end: date, window_start: date, window_end: date) -> int:
+def _working_days(start: date, end: date) -> int:
+    """Backwards-compatible weekday count used by older callers/tests."""
+    return _scheduled_days(start, end)
+
+
+def _overlap_working_days(
+    start: date,
+    end: date,
+    window_start: date,
+    window_end: date,
+    working_days: set[int] | frozenset[int] = DEFAULT_WORKING_DAYS,
+    exceptions: dict[date, bool] | None = None,
+) -> int:
     left = max(start, window_start)
     right = min(end, window_end - timedelta(days=1))
     if right < left:
         return 0
-    return _working_days(left, right + timedelta(days=1))
+    return _scheduled_days(left, right + timedelta(days=1), working_days, exceptions)
 
 
 def _decimal(value: object | None) -> Decimal:
@@ -120,6 +152,140 @@ async def _org_users(db: AsyncSession, organization_id: uuid.UUID) -> list[User]
     return list(result.scalars().all())
 
 
+def _schedule_exception_out(
+    exception: OrganizationScheduleException,
+    users: dict[uuid.UUID, User],
+) -> PayrollScheduleExceptionOut:
+    creator = users.get(exception.created_by) if exception.created_by else None
+    return PayrollScheduleExceptionOut(
+        id=exception.id,
+        organization_id=exception.organization_id,
+        exception_date=exception.exception_date,
+        name=exception.name,
+        is_working_day=exception.is_working_day,
+        created_by=exception.created_by,
+        created_by_name=creator.name if creator else None,
+        created_at=exception.created_at,
+    )
+
+
+async def _schedule_for_org(db: AsyncSession, organization_id: uuid.UUID) -> OrganizationWorkSchedule | None:
+    result = await db.execute(
+        select(OrganizationWorkSchedule).where(OrganizationWorkSchedule.organization_id == organization_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def _schedule_exceptions_for_org(
+    db: AsyncSession,
+    organization_id: uuid.UUID,
+) -> list[OrganizationScheduleException]:
+    result = await db.execute(
+        select(OrganizationScheduleException)
+        .where(OrganizationScheduleException.organization_id == organization_id)
+        .order_by(OrganizationScheduleException.exception_date.asc())
+    )
+    return list(result.scalars().all())
+
+
+async def _schedule_response(
+    db: AsyncSession,
+    organization_id: uuid.UUID,
+    schedule: OrganizationWorkSchedule,
+) -> PayrollScheduleOut:
+    exceptions = await _schedule_exceptions_for_org(db, organization_id)
+    users = {user.id: user for user in await _org_users(db, organization_id)}
+    return PayrollScheduleOut(
+        organization_id=organization_id,
+        working_days=sorted(set(schedule.working_days or DEFAULT_WORKING_DAYS)),
+        standard_hours_per_day=float(schedule.standard_hours_per_day or 8),
+        exceptions=[_schedule_exception_out(item, users) for item in exceptions],
+        updated_at=schedule.updated_at,
+    )
+
+
+@payroll_router.get("/schedule", response_model=PayrollScheduleOut)
+async def get_payroll_schedule(
+    current: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    schedule = await _schedule_for_org(db, current.organization_id)
+    if schedule is None:
+        schedule = OrganizationWorkSchedule(
+            organization_id=current.organization_id,
+            working_days=sorted(DEFAULT_WORKING_DAYS),
+            standard_hours_per_day=8,
+        )
+        db.add(schedule)
+        await db.commit()
+        await db.refresh(schedule)
+    return await _schedule_response(db, current.organization_id, schedule)
+
+
+@payroll_router.put("/schedule", response_model=PayrollScheduleOut)
+async def update_payroll_schedule(
+    payload: PayrollScheduleUpdate,
+    current: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    schedule = await _schedule_for_org(db, current.organization_id)
+    if schedule is None:
+        schedule = OrganizationWorkSchedule(organization_id=current.organization_id)
+        db.add(schedule)
+    schedule.working_days = payload.working_days
+    schedule.standard_hours_per_day = payload.standard_hours_per_day
+    await db.commit()
+    await db.refresh(schedule)
+    return await _schedule_response(db, current.organization_id, schedule)
+
+
+@payroll_router.post("/schedule/exceptions", response_model=PayrollScheduleExceptionOut, status_code=status.HTTP_201_CREATED)
+async def create_payroll_schedule_exception(
+    payload: PayrollScheduleExceptionCreate,
+    current: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    existing_result = await db.execute(
+        select(OrganizationScheduleException).where(
+            OrganizationScheduleException.organization_id == current.organization_id,
+            OrganizationScheduleException.exception_date == payload.exception_date,
+        )
+    )
+    if existing_result.scalar_one_or_none() is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "A schedule exception already exists for this date")
+    exception = OrganizationScheduleException(
+        organization_id=current.organization_id,
+        exception_date=payload.exception_date,
+        name=payload.name,
+        is_working_day=payload.is_working_day,
+        created_by=current.id,
+    )
+    db.add(exception)
+    await db.commit()
+    await db.refresh(exception)
+    users = {user.id: user for user in await _org_users(db, current.organization_id)}
+    return _schedule_exception_out(exception, users)
+
+
+@payroll_router.delete("/schedule/exceptions/{exception_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_payroll_schedule_exception(
+    exception_id: uuid.UUID,
+    current: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(OrganizationScheduleException).where(
+            OrganizationScheduleException.id == exception_id,
+            OrganizationScheduleException.organization_id == current.organization_id,
+        )
+    )
+    exception = result.scalar_one_or_none()
+    if exception is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Schedule exception not found")
+    await db.delete(exception)
+    await db.commit()
+
+
 @payroll_router.get("", response_model=PayrollSummaryOut)
 async def payroll_summary(
     month: str | None = Query(default=None),
@@ -154,6 +320,11 @@ async def payroll_summary(
         ).order_by(LeaveRequest.start_date.desc(), LeaveRequest.created_at.desc())
     )
     leaves = list(leaves_result.scalars().all())
+    schedule = await _schedule_for_org(db, current.organization_id)
+    working_days = set(schedule.working_days or DEFAULT_WORKING_DAYS) if schedule else set(DEFAULT_WORKING_DAYS)
+    schedule_hours = _decimal(schedule.standard_hours_per_day if schedule else 8)
+    schedule_exceptions = await _schedule_exceptions_for_org(db, current.organization_id)
+    exception_overrides = {item.exception_date: item.is_working_day for item in schedule_exceptions}
     all_users = {user.id: user for user in await _org_users(db, current.organization_id)}
     entries_by_user: dict[uuid.UUID, list[TimeEntry]] = {user_id: [] for user_id in user_ids}
     leaves_by_user: dict[uuid.UUID, list[LeaveRequest]] = {user_id: [] for user_id in user_ids}
@@ -162,7 +333,7 @@ async def payroll_summary(
     for leave in leaves:
         leaves_by_user.setdefault(leave.user_id, []).append(leave)
 
-    target_days = _working_days(month_start, month_end)
+    target_days = _scheduled_days(month_start, month_end, working_days, exception_overrides)
     employee_rows: list[PayrollEmployeeOut] = []
     total_target = Decimal("0")
     total_approved = Decimal("0")
@@ -172,13 +343,24 @@ async def payroll_summary(
     for user in users:
         profile = profiles.get(user.id)
         hourly_rate = _decimal(profile.hourly_rate if profile else 0)
-        standard_hours = _decimal(profile.standard_hours_per_day if profile else 8)
+        standard_hours = _decimal(profile.standard_hours_per_day if profile else schedule_hours)
         user_entries = entries_by_user.get(user.id, [])
         user_leaves = leaves_by_user.get(user.id, [])
         approved_hours = sum((_decimal(entry.hours) for entry in user_entries if entry.status == "approved"), Decimal("0"))
         pending_hours = sum((_decimal(entry.hours) for entry in user_entries if entry.status == "pending"), Decimal("0"))
         leave_days = sum(
-            (_overlap_working_days(leave.start_date, leave.end_date, month_start, month_end) for leave in user_leaves if leave.status == "approved"),
+            (
+                _overlap_working_days(
+                    leave.start_date,
+                    leave.end_date,
+                    month_start,
+                    month_end,
+                    working_days,
+                    exception_overrides,
+                )
+                for leave in user_leaves
+                if leave.status == "approved"
+            ),
             0,
         )
         target_hours = Decimal(target_days) * standard_hours

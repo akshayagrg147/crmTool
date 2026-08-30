@@ -25,6 +25,53 @@ class PayrollRateOut(BaseModel):
     standard_hours_per_day: float
 
 
+class PayrollScheduleUpdate(BaseModel):
+    working_days: list[int] = Field(default_factory=lambda: [0, 1, 2, 3, 4], min_length=1, max_length=7)
+    standard_hours_per_day: float = Field(default=8, gt=0, le=24)
+
+    @field_validator("working_days")
+    @classmethod
+    def validate_working_days(cls, value: list[int]) -> list[int]:
+        if len(set(value)) != len(value) or any(day < 0 or day > 6 for day in value):
+            raise ValueError("Working days must be unique weekday numbers from 0 (Monday) to 6 (Sunday)")
+        return sorted(value)
+
+
+class PayrollScheduleExceptionCreate(BaseModel):
+    exception_date: date
+    name: str = Field(min_length=1, max_length=120)
+    is_working_day: bool = False
+
+    @field_validator("name")
+    @classmethod
+    def clean_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("A name is required")
+        return value
+
+
+class PayrollScheduleExceptionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    organization_id: uuid.UUID
+    exception_date: date
+    name: str
+    is_working_day: bool
+    created_by: uuid.UUID | None
+    created_by_name: str | None = None
+    created_at: datetime
+
+
+class PayrollScheduleOut(BaseModel):
+    organization_id: uuid.UUID
+    working_days: list[int]
+    standard_hours_per_day: float
+    exceptions: list[PayrollScheduleExceptionOut] = Field(default_factory=list)
+    updated_at: datetime | None = None
+
+
 class TimeEntryCreate(BaseModel):
     user_id: uuid.UUID | None = None
     entry_date: date

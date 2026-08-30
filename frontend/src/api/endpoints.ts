@@ -47,6 +47,8 @@ import type {
   AttendanceOverview,
   LeaveRequest,
   PayrollSummary,
+  PayrollSchedule,
+  PayrollScheduleException,
   PayrollTimeEntry,
   TimeEntryCategory,
   TimeEntryStatus,
@@ -248,6 +250,12 @@ export const securityApi = {
 
 export const payrollApi = {
   summary: (month: string) => apiClient.get<PayrollSummary>("/payroll", { params: { month } }).then((r) => r.data),
+  schedule: () => apiClient.get<PayrollSchedule>("/payroll/schedule").then((r) => r.data),
+  updateSchedule: (payload: { working_days: number[]; standard_hours_per_day: number }) =>
+    apiClient.put<PayrollSchedule>("/payroll/schedule", payload).then((r) => r.data),
+  addScheduleException: (payload: { exception_date: string; name: string; is_working_day: boolean }) =>
+    apiClient.post<PayrollScheduleException>("/payroll/schedule/exceptions", payload).then((r) => r.data),
+  removeScheduleException: (id: string) => apiClient.delete(`/payroll/schedule/exceptions/${id}`).then((r) => r.data),
   updateRate: (userId: string, payload: { hourly_rate: number; standard_hours_per_day: number }) =>
     apiClient.put(`/payroll/employees/${userId}`, payload).then((r) => r.data),
 };

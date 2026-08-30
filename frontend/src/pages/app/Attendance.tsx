@@ -51,6 +51,7 @@ export function AttendancePage() {
   const [leaveType, setLeaveType] = useState<(typeof leaveTypes)[number]>("personal");
   const [leaveReason, setLeaveReason] = useState("");
   const isReviewer = user?.role === "admin" || user?.role === "manager";
+  const isAdmin = user?.role === "admin";
 
   const { data, isLoading } = useQuery({
     queryKey: ["attendance", month],
@@ -98,11 +99,11 @@ export function AttendancePage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-4 border-b border-ink-100 pb-5">
-        <div><p className="page-eyebrow mb-1">Operations / Attendance</p><h1 className="page-title">My time & leave</h1><p className="page-subtitle">Log every kind of work, request leave, and keep approvals in one place.</p></div>
+        <div><p className="page-eyebrow mb-1">Operations / Attendance</p><h1 className="page-title">{isAdmin ? "Admin time & leave" : "My time & leave"}</h1><p className="page-subtitle">{isAdmin ? "Log your own work, request leave, and approve attendance requests." : "Log every kind of work, request leave, and keep approvals in one place."}</p></div>
         <label className="flex items-center gap-2 text-sm font-medium text-ink-600"><CalendarClock size={16} className="text-ink-400" /><span className="sr-only">Attendance month</span><input type="month" className="input w-auto py-2" value={month} onChange={(event) => { setMonth(event.target.value); setEntryDate(todayForMonth(event.target.value)); setLeaveStart(todayForMonth(event.target.value)); setLeaveEnd(todayForMonth(event.target.value)); }} /></label>
       </div>
 
-      <div className="rounded-xl border border-primary/10 bg-primary-soft/50 px-4 py-3 text-sm text-primary-dark"><span className="font-semibold">Private payroll:</span> your hours and leave requests are visible to the assigned manager and admin for approval. Salary totals are available only in the admin Payroll workspace.</div>
+      <div className="rounded-xl border border-primary/10 bg-primary-soft/50 px-4 py-3 text-sm text-primary-dark"><span className="font-semibold">Private payroll:</span> {isAdmin ? "your submissions appear in the approval queue, where you can approve or reject them." : "your hours and leave requests are visible to the assigned manager and admin for approval."} Salary totals are available only in the admin Payroll workspace.</div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="card p-5"><p className="text-[11px] font-bold uppercase tracking-[0.12em] text-ink-500">Logged hours</p><p className="mt-3 text-3xl font-bold tabular-nums text-ink-900">{totalHours.toFixed(1)}h</p><p className="mt-1 text-xs text-ink-500">{approvedHours.toFixed(1)}h approved</p></div>
@@ -111,7 +112,7 @@ export function AttendancePage() {
       </div>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-        <section className="card p-5 sm:p-6">
+        <section id="log-work-time" className="card scroll-mt-6 p-5 sm:p-6">
           <div className="mb-5 flex items-start gap-3"><div className="rounded-xl bg-primary-soft p-2.5 text-primary"><Clock3 size={19} /></div><div><h2 className="panel-header font-semibold text-ink-900">Log work time</h2><p className="mt-1 text-xs text-ink-500">Calling time is captured automatically when you log a call. Use this for events, training, admin work, or anything extra.</p></div></div>
           <form className="grid grid-cols-1 gap-3 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); if (Number(hours) > 0) timeMutation.mutate(); }}>
             <label className="text-xs font-semibold text-ink-600">Date<input required type="date" min={`${month}-01`} max={monthEnd(month)} className="input mt-1.5" value={entryDate} onChange={(event) => setEntryDate(event.target.value)} /></label>
@@ -122,8 +123,8 @@ export function AttendancePage() {
           </form>
         </section>
 
-        <section className="card p-5 sm:p-6">
-          <div className="mb-5 flex items-start gap-3"><div className="rounded-xl bg-accent-soft p-2.5 text-accent-dark"><CalendarClock size={19} /></div><div><h2 className="panel-header font-semibold text-ink-900">Request leave</h2><p className="mt-1 text-xs text-ink-500">Your manager or admin will review the request before it affects payroll.</p></div></div>
+        <section id="request-leave" className="card scroll-mt-6 p-5 sm:p-6">
+          <div className="mb-5 flex items-start gap-3"><div className="rounded-xl bg-accent-soft p-2.5 text-accent-dark"><CalendarClock size={19} /></div><div><h2 className="panel-header font-semibold text-ink-900">Request leave</h2><p className="mt-1 text-xs text-ink-500">{isAdmin ? "The request will appear as pending until you approve it." : "Your manager or admin will review the request before it affects payroll."}</p></div></div>
           <form className="grid grid-cols-1 gap-3 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); leaveMutation.mutate(); }}>
             <label className="text-xs font-semibold text-ink-600">From<input required type="date" min={`${month}-01`} max={monthEnd(month)} className="input mt-1.5" value={leaveStart} onChange={(event) => setLeaveStart(event.target.value)} /></label>
             <label className="text-xs font-semibold text-ink-600">To<input required type="date" min={`${month}-01`} max={monthEnd(month)} className="input mt-1.5" value={leaveEnd} onChange={(event) => setLeaveEnd(event.target.value)} /></label>
@@ -140,7 +141,7 @@ export function AttendancePage() {
       </div>
 
       {isReviewer && (
-        <section className="card overflow-hidden">
+        <section id="attendance-approvals" className="card scroll-mt-6 overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink-100 px-5 py-4"><div><h2 className="flex items-center gap-2 font-semibold text-ink-900"><ClipboardCheck size={18} className="text-primary" /> Approval queue</h2><p className="mt-1 text-xs text-ink-500">Approve or reject team submissions. Managers review telecaller activity; admins can review everyone.</p></div><span className="badge bg-accent-soft text-accent-dark">{(approvals?.time_entries.length ?? 0) + (approvals?.leaves.length ?? 0)} pending</span></div>
           {!approvals || (approvals.time_entries.length === 0 && approvals.leaves.length === 0) ? <EmptyState icon={ClipboardCheck} title="All caught up" message="There are no pending time or leave requests for this month." /> : <div className="divide-y divide-ink-100">
             {approvals.time_entries.map((entry) => <div key={`approval-time-${entry.id}`} className="flex flex-wrap items-center gap-3 px-5 py-4"><div className="rounded-lg bg-primary-soft p-2 text-primary"><Clock3 size={15} /></div><div className="min-w-[180px] flex-1"><p className="font-medium text-ink-800">{entry.user_name ?? "Team member"}</p><p className="mt-0.5 text-xs text-ink-500">{formatDate(entry.entry_date)} · {entry.hours.toFixed(2)}h · {categories.find((item) => item.value === entry.category)?.label ?? entry.category}</p>{entry.description && <p className="mt-1 text-xs text-ink-600">{entry.description}</p>}</div><p className="mr-2 text-[11px] text-ink-400">Submitted {formatDateTime(entry.created_at)}</p><div className="flex gap-2"><button type="button" className="btn-secondary px-3 py-1.5 text-xs text-danger" disabled={reviewTimeMutation.isPending} onClick={() => reviewTimeMutation.mutate({ id: entry.id, status: "rejected" })}><X size={14} /> Reject</button><button type="button" className="btn-primary px-3 py-1.5 text-xs" disabled={reviewTimeMutation.isPending} onClick={() => reviewTimeMutation.mutate({ id: entry.id, status: "approved" })}><Check size={14} /> Approve</button></div></div>)}

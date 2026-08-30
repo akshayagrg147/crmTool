@@ -2,6 +2,7 @@ from datetime import date
 
 import pytest
 
+from app.api.payroll import DEFAULT_WORKING_DAYS, _overlap_working_days, _scheduled_days
 from app.core.security import create_access_token, hash_password
 from app.models.payroll import EmployeePayrollProfile, LeaveRequest, TimeEntry
 from app.models.user import User, UserRole
@@ -24,6 +25,19 @@ async def _member(db, organization_id, name, phone, role):
 
 def _token(user):
     return create_access_token(str(user.id), user.role.value, str(user.organization_id))
+
+
+def test_schedule_counts_configured_days_and_date_overrides():
+    month_start = date(2026, 8, 1)
+    month_end = date(2026, 9, 1)
+    saturday = date(2026, 8, 8)
+    holiday = date(2026, 8, 10)
+
+    assert _scheduled_days(month_start, month_end) == 21
+    assert _scheduled_days(month_start, month_end) * 8 == 168
+    assert _scheduled_days(month_start, month_end, {0, 1, 2, 3, 4, 5}) == 26
+    assert _scheduled_days(month_start, month_end, DEFAULT_WORKING_DAYS, {holiday: False, saturday: True}) == 21
+    assert _overlap_working_days(saturday, saturday, month_start, month_end, DEFAULT_WORKING_DAYS, {saturday: True}) == 1
 
 
 @pytest.mark.asyncio
@@ -101,3 +115,39 @@ async def test_manager_can_review_telecaller_but_cannot_view_payroll(client, db_
     admin_queue = await client.get("/api/attendance/approvals?month=2026-08", headers={"Authorization": f"Bearer {_token(admin)}"})
     assert admin_queue.status_code == 200
     assert admin_queue.json()["time_entries"] == []
+
+
+@pytest.mark.asyncio
+async def test_admin_can_submit_and_approve_own_time_and_leave(client, db_session):
+    org, admin = await create_org_with_admin(db_session, "Admin Attendance QA", "9600000021")
+    headers = {"Authorization": f"Bearer {_token(admin)}"}
+
+    time_response = await client.post(
+        "/api/attendance/time-entries",
+        json={"entry_date": "2026-08-18", "hours": 7.5, "category": "admin", "description": "Operations review"},
+        headers=headers,
+    )
+    assert time_response.status_code == 201, time_response.text
+    assert time_response.json()["status"] == "pending"
+
+    leave_response = await client.post(
+        "/api/attendance/leave-requests",
+        json={"start_date": "2026-08-21", "end_date": "2026-08-21", "leave_type": "planned", "reason": "Personal appointment"},
+        headers=headers,
+    )
+    assert leave_response.status_code == 201, leave_response.text
+    leave_id = leave_response.json()["id"]
+    assert leave_response.json()["status"] == "pending"
+
+    approvals = await client.get("/api/attendance/approvals?month=2026-08", headers=headers)
+    assert approvals.status_code == 200, approvals.text
+    assert leave_id in [item["id"] for item in approvals.json()["leaves"]]
+
+    approved = await client.patch(
+        f"/api/attendance/leave-requests/{leave_id}",
+        json={"status": "approved", "review_note": "Approved by admin"},
+        headers=headers,
+    )
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["status"] == "approved"
+    assert approved.json()["reviewed_by"] == str(admin.id)

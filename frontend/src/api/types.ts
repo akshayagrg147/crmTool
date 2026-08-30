@@ -156,6 +156,25 @@ export interface PayrollSummary {
   total_estimated_pay: number;
 }
 
+export interface PayrollScheduleException {
+  id: string;
+  organization_id: string;
+  exception_date: string;
+  name: string;
+  is_working_day: boolean;
+  created_by: string | null;
+  created_by_name: string | null;
+  created_at: string;
+}
+
+export interface PayrollSchedule {
+  organization_id: string;
+  working_days: number[];
+  standard_hours_per_day: number;
+  exceptions: PayrollScheduleException[];
+  updated_at: string | null;
+}
+
 export interface AttendanceOverview {
   month: string;
   entries: PayrollTimeEntry[];
