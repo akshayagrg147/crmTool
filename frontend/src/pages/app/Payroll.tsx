@@ -234,15 +234,11 @@ export function PayrollPage() {
           <div className="flex items-start gap-3">
             <div className="rounded-xl bg-white p-2.5 text-primary shadow-sm"><CalendarClock size={19} /></div>
             <div>
-              <div className="flex flex-wrap items-center gap-2"><h2 className="panel-header font-semibold text-ink-900">Admin time & leave</h2><span className="badge bg-primary-soft text-primary-dark">Admin only</span></div>
-              <p className="mt-1.5 max-w-2xl text-xs leading-5 text-ink-600">Log your own work time, request leave, and approve your requests from the same attendance workspace. Admin submissions remain pending until you approve them.</p>
+              <div className="flex flex-wrap items-center gap-2"><h2 className="panel-header font-semibold text-ink-900">Attendance approvals</h2><span className="badge bg-primary-soft text-primary-dark">Admin review</span></div>
+              <p className="mt-1.5 max-w-2xl text-xs leading-5 text-ink-600">Review team work-time and leave requests from the attendance queue. Admin accounts do not submit personal attendance or leave requests.</p>
             </div>
           </div>
           <Link to="/attendance#attendance-approvals" className="btn-ghost shrink-0 px-3 py-2 text-xs">Open approvals <ArrowRight size={14} /></Link>
-        </div>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Link to="/attendance#log-work-time" className="btn-primary px-3 py-2 text-xs"><Clock3 size={15} />Log work time</Link>
-          <Link to="/attendance#request-leave" className="btn-secondary px-3 py-2 text-xs"><CalendarClock size={15} />Request leave</Link>
         </div>
       </section>
 

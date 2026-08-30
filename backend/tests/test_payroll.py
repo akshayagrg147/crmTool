@@ -118,8 +118,9 @@ async def test_manager_can_review_telecaller_but_cannot_view_payroll(client, db_
 
 
 @pytest.mark.asyncio
-async def test_admin_can_submit_and_approve_own_time_and_leave(client, db_session):
+async def test_admin_cannot_submit_own_time_or_leave_but_can_review_team_requests(client, db_session):
     org, admin = await create_org_with_admin(db_session, "Admin Attendance QA", "9600000021")
+    telecaller = await _member(db_session, org.id, "Admin Attendance Telecaller", "9600000022", UserRole.telecaller)
     headers = {"Authorization": f"Bearer {_token(admin)}"}
 
     time_response = await client.post(
@@ -127,17 +128,39 @@ async def test_admin_can_submit_and_approve_own_time_and_leave(client, db_sessio
         json={"entry_date": "2026-08-18", "hours": 7.5, "category": "admin", "description": "Operations review"},
         headers=headers,
     )
-    assert time_response.status_code == 201, time_response.text
-    assert time_response.json()["status"] == "pending"
+    assert time_response.status_code == 403, time_response.text
+    assert time_response.json()["detail"] == "Admins cannot submit personal work time"
 
     leave_response = await client.post(
         "/api/attendance/leave-requests",
         json={"start_date": "2026-08-21", "end_date": "2026-08-21", "leave_type": "planned", "reason": "Personal appointment"},
         headers=headers,
     )
-    assert leave_response.status_code == 201, leave_response.text
-    leave_id = leave_response.json()["id"]
-    assert leave_response.json()["status"] == "pending"
+    assert leave_response.status_code == 403, leave_response.text
+    assert leave_response.json()["detail"] == "Admins cannot submit personal leave requests"
+
+    explicit_self_time = await client.post(
+        "/api/attendance/time-entries",
+        json={"user_id": str(admin.id), "entry_date": "2026-08-18", "hours": 7.5, "category": "admin"},
+        headers=headers,
+    )
+    assert explicit_self_time.status_code == 403
+
+    explicit_self_leave = await client.post(
+        "/api/attendance/leave-requests",
+        json={"user_id": str(admin.id), "start_date": "2026-08-21", "end_date": "2026-08-21", "leave_type": "planned", "reason": "Personal appointment"},
+        headers=headers,
+    )
+    assert explicit_self_leave.status_code == 403
+
+    team_leave = await client.post(
+        "/api/attendance/leave-requests",
+        json={"user_id": str(telecaller.id), "start_date": "2026-08-21", "end_date": "2026-08-21", "leave_type": "planned", "reason": "Personal appointment"},
+        headers=headers,
+    )
+    assert team_leave.status_code == 201, team_leave.text
+    leave_id = team_leave.json()["id"]
+    assert team_leave.json()["status"] == "pending"
 
     approvals = await client.get("/api/attendance/approvals?month=2026-08", headers=headers)
     assert approvals.status_code == 200, approvals.text

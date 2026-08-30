@@ -535,6 +535,8 @@ async def create_time_entry(
     target = target_result.scalar_one_or_none()
     if target is None or target.role == UserRole.super_admin:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Employee not found")
+    if target_id == current.id and current.role == UserRole.admin:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Admins cannot submit personal work time")
     if target_id != current.id and current.role != UserRole.admin:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only admins can record time for another employee")
     entry = TimeEntry(
@@ -589,6 +591,8 @@ async def create_leave_request(
     target = target_result.scalar_one_or_none()
     if target is None or target.role == UserRole.super_admin:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Employee not found")
+    if target_id == current.id and current.role == UserRole.admin:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Admins cannot submit personal leave requests")
     if target_id != current.id and current.role != UserRole.admin:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only admins can create leave for another employee")
     if payload.end_date < payload.start_date:
