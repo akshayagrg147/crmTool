@@ -21,6 +21,15 @@ class ObjectStorageError(RuntimeError):
     """Raised when S3 is unavailable or not configured."""
 
 
+def _endpoint_url() -> str | None:
+    """Use the regional S3 endpoint so presigned URLs are not redirected."""
+    if settings.s3_endpoint_url:
+        return settings.s3_endpoint_url
+    if settings.s3_region:
+        return f"https://s3.{settings.s3_region}.amazonaws.com"
+    return None
+
+
 @lru_cache(maxsize=1)
 def _client():
     if not settings.s3_bucket:
@@ -30,7 +39,7 @@ def _client():
     return boto3.client(
         "s3",
         region_name=settings.s3_region or None,
-        endpoint_url=settings.s3_endpoint_url or None,
+        endpoint_url=_endpoint_url(),
     )
 
 
