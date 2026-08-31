@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 interface ModalProps {
   open: boolean;
@@ -22,6 +23,7 @@ const focusableSelector = [
 ].join(",");
 
 export function Modal({ open, onClose, title, children, footer, size = "md" }: ModalProps) {
+  const { organizationName, organizationLogoUrl } = useAuth();
   const dialogRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
   const titleId = useId();
@@ -107,8 +109,15 @@ export function Modal({ open, onClose, title, children, footer, size = "md" }: M
       >
         <div className="h-1 shrink-0 bg-gradient-to-r from-primary via-primary to-accent" aria-hidden="true" />
         <div className="flex items-center justify-between gap-4 border-b border-ink-100 px-5 py-4 sm:px-6">
-          <div>
-            <p className="mb-1 text-[9px] font-bold uppercase tracking-[0.17em] text-accent-dark">TalkoCRM workspace</p>
+          <div className="min-w-0">
+            <div className="mb-1 flex min-w-0 items-center gap-1.5">
+              {organizationLogoUrl && (
+                <img src={organizationLogoUrl} alt="" className="h-4 w-4 shrink-0 rounded object-contain" />
+              )}
+              <p className="truncate text-[9px] font-bold uppercase tracking-[0.17em] text-accent-dark">
+                {organizationName ? `${organizationName} workspace` : "TalkoCRM workspace"}
+              </p>
+            </div>
             <h2 id={titleId} className="text-xl font-semibold leading-tight text-ink-900">
               {title}
             </h2>

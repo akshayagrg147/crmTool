@@ -84,8 +84,8 @@ export function OrganizationDetailsModal({ organization, onClose, onEdit }: Orga
         <div>
           <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-primary/10 bg-primary-soft/45 p-4">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-white shadow-sm">
-                <Building2 size={20} aria-hidden="true" />
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-primary text-white shadow-sm">
+                {data.logo_url ? <img src={data.logo_url} alt={`${data.name} logo`} className="max-h-full max-w-full bg-white object-contain p-1" /> : <Building2 size={20} aria-hidden="true" />}
               </div>
               <div className="min-w-0">
                 <h3 className="truncate text-base font-semibold text-ink-900">{data.name}</h3>

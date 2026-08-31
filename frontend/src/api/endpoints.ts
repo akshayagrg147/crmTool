@@ -62,7 +62,7 @@ export interface TokenPair {
 export const authApi = {
   login: (phone: string, password: string, countryCode?: string, otp?: string) =>
     apiClient
-      .post<{ tokens: TokenPair; user: UserOut; organization_name: string | null }>("/auth/login", {
+      .post<{ tokens: TokenPair; user: UserOut; organization_name: string | null; organization_logo_url: string | null }>("/auth/login", {
         phone,
         password,
         country_code: countryCode,
@@ -370,6 +370,15 @@ export const superAdminApi = {
     admin_email?: string;
     admin_password: string;
   }) => apiClient.post<OrganizationOut>("/super-admin/organizations", payload).then((r) => r.data),
+  uploadOrganizationLogo: (id: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return apiClient
+      .post<OrganizationOut>(`/super-admin/organizations/${id}/logo`, form, { headers: { "Content-Type": "multipart/form-data" } })
+      .then((r) => r.data);
+  },
+  removeOrganizationLogo: (id: string) =>
+    apiClient.delete<OrganizationOut>(`/super-admin/organizations/${id}/logo`).then((r) => r.data),
   updateOrganization: (
     id: string,
     payload: {

@@ -1,13 +1,16 @@
+import asyncio
 import uuid
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import CurrentUser, require_super_admin
 from app.core.security import create_impersonation_token, hash_password
+from app.core.config import settings
 from app.models.distribution_settings import DistributionSettings
 from app.models.lead import Lead
 from app.models.organization import Organization
@@ -22,8 +25,33 @@ from app.schemas.organization import (
     OrganizationUpdate,
     PlatformStats,
 )
+from app.services.object_storage import ObjectStorageError, delete_object, upload_logo as upload_logo_to_s3
+from app.api.branding import logo_proxy_url
 
 router = APIRouter(prefix="/super-admin", tags=["super-admin"])
+
+LOGO_TYPES = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/webp": ".webp",
+}
+LOGO_EXTENSIONS = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+}
+
+
+def _logo_content_type(file: UploadFile) -> tuple[str, str] | None:
+    content_type = (file.content_type or "").split(";", 1)[0].strip().lower()
+    if content_type in LOGO_TYPES:
+        return content_type, LOGO_TYPES[content_type]
+    suffix = Path(file.filename or "").suffix.lower()
+    inferred_type = LOGO_EXTENSIONS.get(suffix)
+    if inferred_type:
+        return inferred_type, LOGO_TYPES[inferred_type]
+    return None
 
 
 async def _organization_details(org: Organization, db: AsyncSession) -> OrganizationDetailsOut:
@@ -40,6 +68,7 @@ async def _organization_details(org: Organization, db: AsyncSession) -> Organiza
     return OrganizationDetailsOut(
         id=org.id,
         name=org.name,
+        logo_url=org.logo_url,
         is_active=org.is_active,
         plan=org.plan,
         created_at=org.created_at,
@@ -116,6 +145,85 @@ async def create_organization(
     return out
 
 
+@router.post("/organizations/{org_id}/logo", response_model=OrganizationOut)
+async def upload_organization_logo(
+    org_id: uuid.UUID,
+    file: UploadFile = File(...),
+    current: CurrentUser = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Organization).where(Organization.id == org_id))
+    org = result.scalar_one_or_none()
+    if org is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Organization not found")
+
+    content_info = _logo_content_type(file)
+    if content_info is None:
+        raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Logo must be a PNG, JPG, or WebP image")
+    content_type, extension = content_info
+    # Read only one byte past the configured limit so an oversized multipart
+    # upload cannot consume unbounded memory before we reject it.
+    content = await file.read(settings.max_logo_size_bytes + 1)
+    if not content:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "The selected logo is empty")
+    if len(content) > settings.max_logo_size_bytes:
+        limit_mb = settings.max_logo_size_bytes // (1024 * 1024)
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, f"Logo must be smaller than {limit_mb} MB")
+
+    storage_key = f"organizations/{org.id}/logo/{uuid.uuid4()}{extension}"
+    try:
+        await asyncio.to_thread(upload_logo_to_s3, storage_key, content, content_type)
+    except ObjectStorageError as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+
+    previous_key = org.logo_storage_key
+    org.logo_storage_key = storage_key
+    org.logo_url = logo_proxy_url(org.id)
+    try:
+        await db.commit()
+        await db.refresh(org)
+    except Exception:
+        await db.rollback()
+        try:
+            await asyncio.to_thread(delete_object, storage_key)
+        except ObjectStorageError:
+            pass
+        raise
+
+    if previous_key:
+        try:
+            await asyncio.to_thread(delete_object, previous_key)
+        except ObjectStorageError:
+            # The new logo is already active. A failed cleanup should not make
+            # an otherwise successful branding update look like a failure.
+            pass
+
+    return org
+
+
+@router.delete("/organizations/{org_id}/logo", response_model=OrganizationOut)
+async def delete_organization_logo(
+    org_id: uuid.UUID,
+    current: CurrentUser = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Organization).where(Organization.id == org_id))
+    org = result.scalar_one_or_none()
+    if org is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Organization not found")
+    previous_key = org.logo_storage_key
+    if previous_key:
+        try:
+            await asyncio.to_thread(delete_object, previous_key)
+        except ObjectStorageError as exc:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    org.logo_storage_key = None
+    org.logo_url = None
+    await db.commit()
+    await db.refresh(org)
+    return org
+
+
 @router.patch("/organizations/{org_id}", response_model=OrganizationDetailsOut)
 async def update_organization(
     org_id: uuid.UUID,
@@ -168,6 +276,12 @@ async def delete_organization(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Organization not found")
     if confirm_name != org.name:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Organization name confirmation does not match")
+
+    if org.logo_storage_key:
+        try:
+            await asyncio.to_thread(delete_object, org.logo_storage_key)
+        except ObjectStorageError as exc:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
 
     # Use a database delete so every organization-owned record follows its
     # foreign-key ON DELETE CASCADE policy in one transaction.

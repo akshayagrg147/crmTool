@@ -57,6 +57,7 @@ export interface MergeLeadResult {
 export interface MyOrganization {
   id: string;
   name: string;
+  logo_url: string | null;
   plan: string;
   created_at: string;
 }
@@ -568,6 +569,7 @@ export interface AnalyticsResponse {
 export interface OrganizationOut {
   id: string;
   name: string;
+  logo_url: string | null;
   is_active: boolean;
   plan: string;
   created_at: string;

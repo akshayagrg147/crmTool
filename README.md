@@ -101,6 +101,7 @@ The web app is now live at `http://localhost:5173`.
 ## Notes
 
 - No public sign-up: accounts are created by an org Admin (team members) or the Super Admin (new organizations).
+- Super Admins can upload an optional PNG/JPG/WebP organization logo. Logos are stored in a private S3 bucket and shown throughout that organization’s authenticated workspace through a signed proxy URL.
 - The last Admin of an organization can never be removed, demoted, or deactivated — enforced server-side.
 - Lead distribution is round-robin across **active** telecallers only, with the rotation pointer persisted per-org and row-locked (`SELECT ... FOR UPDATE`) so concurrent lead creation can't double-assign.
 - Telecallers can reassign only their own leads, and only to an active Manager in the same organization. Admins and Managers retain their existing reassignment controls.

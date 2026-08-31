@@ -69,12 +69,14 @@ async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depe
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, {"code": "two_factor_required", "message": "Enter the six-digit authenticator code"})
 
     org_name = None
+    org_logo_url = None
     if user.organization_id:
         org_result = await db.execute(select(Organization).where(Organization.id == user.organization_id))
         org = org_result.scalar_one_or_none()
         if org is None or not org.is_active:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "This organization has been suspended")
         org_name = org.name
+        org_logo_url = org.logo_url
 
     org_id_str = str(user.organization_id) if user.organization_id else None
     access = create_access_token(str(user.id), user.role.value, org_id_str)
@@ -83,6 +85,7 @@ async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depe
         tokens=TokenPair(access_token=access, refresh_token=refresh),
         user=UserOut.model_validate(user),
         organization_name=org_name,
+        organization_logo_url=org_logo_url,
     )
 
 

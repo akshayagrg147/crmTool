@@ -6,6 +6,7 @@ from slowapi.errors import RateLimitExceeded
 from app.api import (
     analytics,
     auth,
+    branding,
     call_logs,
     integrations,
     leads,
@@ -37,6 +38,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router, prefix="/api")
+app.include_router(branding.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
 app.include_router(leads.router, prefix="/api")
 app.include_router(lost_deals.router, prefix="/api")

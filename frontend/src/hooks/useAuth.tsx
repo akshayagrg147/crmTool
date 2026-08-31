@@ -1,12 +1,13 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { authApi } from "@/api/endpoints";
+import { authApi, organizationApi } from "@/api/endpoints";
 import { getAccessToken, getRefreshToken, setTokens } from "@/api/client";
 import type { UserOut } from "@/api/types";
 
 interface AuthContextValue {
   user: UserOut | null;
   organizationName: string | null;
+  organizationLogoUrl: string | null;
   isLoading: boolean;
   isImpersonating: boolean;
   impersonatedByName: string | null;
@@ -22,6 +23,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [organizationName, setOrganizationName] = useState<string | null>(
     localStorage.getItem("districall_org_name")
+  );
+  const [organizationLogoUrl, setOrganizationLogoUrl] = useState<string | null>(
+    localStorage.getItem("districall_org_logo_url")
   );
   const hasToken = !!getAccessToken();
 
@@ -39,11 +43,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     retry: false,
   });
 
+  const { data: organization } = useQuery({
+    queryKey: ["organization"],
+    queryFn: organizationApi.get,
+    enabled: !!user && user.role !== "super_admin",
+    retry: false,
+  });
+
+  useEffect(() => {
+    if (!organization) return;
+    setOrganizationName(organization.name);
+    setOrganizationLogoUrl(organization.logo_url);
+    localStorage.setItem("districall_org_name", organization.name);
+    if (organization.logo_url) localStorage.setItem("districall_org_logo_url", organization.logo_url);
+    else localStorage.removeItem("districall_org_logo_url");
+  }, [organization]);
+
   async function login(phone: string, password: string, countryCode?: string, otp?: string) {
     const result = await authApi.login(phone, password, countryCode, otp);
     setTokens(result.tokens.access_token, result.tokens.refresh_token);
     setOrganizationName(result.organization_name);
+    setOrganizationLogoUrl(result.organization_logo_url);
     if (result.organization_name) localStorage.setItem("districall_org_name", result.organization_name);
+    if (result.organization_logo_url) localStorage.setItem("districall_org_logo_url", result.organization_logo_url);
+    else localStorage.removeItem("districall_org_logo_url");
     // Seed the cache synchronously with data we already have, rather than
     // relying on invalidateQueries + a background refetch: enabling the "me"
     // query only takes effect on the next render, so a redirect that happens
@@ -57,6 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   function logout() {
     setTokens(null, null);
     localStorage.removeItem("districall_org_name");
+    localStorage.removeItem("districall_org_logo_url");
     queryClient.clear();
     window.location.href = "/login";
   }
@@ -70,6 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setTokens(access, null);
     localStorage.setItem("districall_org_name", orgName);
+    localStorage.removeItem("districall_org_logo_url");
     queryClient.clear();
     window.location.href = "/dashboard";
   }
@@ -80,6 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     sessionStorage.removeItem("districall_super_admin_access");
     sessionStorage.removeItem("districall_super_admin_refresh");
     localStorage.removeItem("districall_org_name");
+    localStorage.removeItem("districall_org_logo_url");
     setTokens(ownAccess, ownRefresh);
     queryClient.clear();
     window.location.href = ownAccess ? "/super-admin" : "/login";
@@ -90,6 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user: user ?? null,
         organizationName,
+        organizationLogoUrl,
         isLoading: hasToken && isLoading,
         isImpersonating: impersonationStatus?.is_impersonating ?? false,
         impersonatedByName: impersonationStatus?.impersonated_by_name ?? null,

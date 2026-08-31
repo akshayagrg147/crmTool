@@ -14,6 +14,12 @@ automatically manages the TLS certificate for the configured domain.
 - Encrypted gp3 root volume
 - A key pair stored only on your computer
 
+For organization logos, create a private S3 bucket in the same region and
+attach a least-privilege IAM role to the EC2 instance. The role needs
+`s3:PutObject`, `s3:GetObject`, and `s3:DeleteObject` for
+`arn:aws:s3:::YOUR_BUCKET/organizations/*`. Keep S3 Block Public Access
+enabled; the application proxies logos through short-lived signed URLs.
+
 ## 2. Install Docker and Git
 
 Connect to the instance using the EC2 console or your private key, then run:
@@ -49,6 +55,9 @@ openssl rand -hex 32
 Use the three different values for `POSTGRES_PASSWORD`, `JWT_SECRET`, and
 `INTEGRATION_ENCRYPTION_KEY`. Replace `YOUR_EC2_PUBLIC_IP` with the instance's
 public IPv4 address. Do not paste the secrets into chat or commit the file.
+Set `S3_BUCKET` to the private logo bucket and `S3_REGION` to its AWS region.
+The EC2 IAM role supplies credentials automatically; no access keys are needed
+in `.env.production`.
 
 ## 5. Start the application
 

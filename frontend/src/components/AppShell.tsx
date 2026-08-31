@@ -65,7 +65,7 @@ export function ImpersonationBanner() {
 }
 
 export function AppShell() {
-  const { user, organizationName, logout, isImpersonating } = useAuth();
+  const { user, organizationName, organizationLogoUrl, logout, isImpersonating } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -195,7 +195,7 @@ export function AppShell() {
       <div className="flex min-h-screen" aria-hidden={mobileNavOpen ? true : undefined}>
         <aside className={`sticky hidden w-[248px] shrink-0 flex-col overflow-hidden bg-primary-dark text-white lg:flex ${isImpersonating ? "top-12 h-[calc(100vh-3rem)]" : "top-0 h-screen"}`}>
           <div className="flex h-16 shrink-0 items-center border-b border-white/[0.08] px-5">
-            <BrandLogo size={38} inverse />
+            <BrandLogo size={38} inverse logoUrl={organizationLogoUrl} brandName={organizationName ?? "TalkoCRM"} />
           </div>
 
           <nav aria-label="Primary navigation" className="flex-1 overflow-y-auto px-3 py-5">
@@ -370,7 +370,13 @@ export function AppShell() {
           />
           <div ref={mobileDrawerRef} className="absolute inset-y-0 left-0 flex w-[min(88vw,320px)] flex-col overflow-hidden bg-primary-dark text-white shadow-popover animate-slide-in-left">
             <div className="flex h-16 shrink-0 items-center gap-3 border-b border-white/[0.08] px-5">
-              <BrandLogo size={38} inverse subtitle={organizationName ?? "Conversation-led CRM"} />
+              <BrandLogo
+                size={38}
+                inverse
+                subtitle={organizationName ?? "Conversation-led CRM"}
+                logoUrl={organizationLogoUrl}
+                brandName={organizationName ?? "TalkoCRM"}
+              />
               <button
                 type="button"
                 onClick={() => setMobileNavOpen(false)}

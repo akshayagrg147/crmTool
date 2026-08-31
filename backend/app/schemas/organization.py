@@ -36,6 +36,7 @@ class OrganizationOut(BaseModel):
 
     id: uuid.UUID
     name: str
+    logo_url: str | None = None
     is_active: bool
     plan: str
     created_at: datetime
@@ -93,6 +94,7 @@ class MyOrganizationOut(BaseModel):
 
     id: uuid.UUID
     name: str
+    logo_url: str | None = None
     plan: str
     created_at: datetime
 

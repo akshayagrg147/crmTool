@@ -38,6 +38,7 @@ class LoginResponse(BaseModel):
     tokens: TokenPair
     user: UserOut
     organization_name: str | None = None
+    organization_logo_url: str | None = None
 
 
 class ImpersonationInfo(BaseModel):

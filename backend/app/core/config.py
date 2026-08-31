@@ -23,6 +23,14 @@ class Settings(BaseSettings):
     attachment_dir: str = "./data/attachments"
     max_attachment_size_bytes: int = 10 * 1024 * 1024
 
+    # Organization logos are kept in a private S3 bucket and served through
+    # the public branding proxy route. The AWS SDK uses the instance role (or
+    # standard AWS environment credentials).
+    s3_bucket: str = ""
+    s3_region: str = ""
+    s3_endpoint_url: str = ""
+    max_logo_size_bytes: int = 5 * 1024 * 1024
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

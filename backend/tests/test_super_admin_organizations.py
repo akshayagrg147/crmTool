@@ -247,3 +247,64 @@ async def test_admin_cannot_edit_or_delete_organization(client, db_session):
 
     assert edit_response.status_code == 403
     assert delete_response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_super_admin_can_upload_and_replace_organization_logo(client, db_session, monkeypatch):
+    org, _ = await create_org_with_admin(db_session, "Branded Organization", "9300000114")
+    super_admin = User(
+        organization_id=None,
+        name="Platform Owner",
+        phone="9300000115",
+        password_hash=hash_password("Password@123"),
+        role=UserRole.super_admin,
+        is_active=True,
+    )
+    db_session.add(super_admin)
+    await db_session.commit()
+    await db_session.refresh(super_admin)
+    uploads: list[tuple[str, bytes, str]] = []
+
+    def fake_upload(key: str, content: bytes, content_type: str) -> None:
+        uploads.append((key, content, content_type))
+
+    monkeypatch.setattr("app.api.super_admin.upload_logo_to_s3", fake_upload)
+    response = await client.post(
+        f"/api/super-admin/organizations/{org.id}/logo",
+        headers={"Authorization": f"Bearer {_token(super_admin)}"},
+        files={"file": ("brand.png", b"fake-png", "image/png")},
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["logo_url"].endswith(f"/api/branding/organizations/{org.id}/logo")
+    assert len(uploads) == 1
+    assert uploads[0][1:] == (b"fake-png", "image/png")
+
+    db_session.expire_all()
+    saved = (await db_session.execute(select(Organization).where(Organization.id == org.id))).scalar_one()
+    assert saved.logo_storage_key == uploads[0][0]
+    assert saved.logo_url == body["logo_url"]
+
+
+@pytest.mark.asyncio
+async def test_logo_upload_rejects_unsupported_files(client, db_session):
+    org, _ = await create_org_with_admin(db_session, "Logo Validation Org", "9300000116")
+    super_admin = User(
+        organization_id=None,
+        name="Platform Owner",
+        phone="9300000117",
+        password_hash=hash_password("Password@123"),
+        role=UserRole.super_admin,
+        is_active=True,
+    )
+    db_session.add(super_admin)
+    await db_session.commit()
+    await db_session.refresh(super_admin)
+    response = await client.post(
+        f"/api/super-admin/organizations/{org.id}/logo",
+        headers={"Authorization": f"Bearer {_token(super_admin)}"},
+        files={"file": ("brand.gif", b"gif", "image/gif")},
+    )
+
+    assert response.status_code == 415

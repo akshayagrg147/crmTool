@@ -128,8 +128,15 @@ export function OrganizationsPage() {
                 {orgs.map((org) => (
                   <tr key={org.id} className="border-t border-ink-100 hover:bg-bg/60">
                     <td className="px-5 py-3">
-                      <p className="font-medium text-ink-900">{org.name}</p>
-                      <p className="text-xs text-ink-500 capitalize">{org.plan} plan</p>
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-primary-soft text-primary">
+                          {org.logo_url ? <img src={org.logo_url} alt="" className="max-h-full max-w-full bg-white object-contain p-1" /> : <Building2 size={17} aria-hidden="true" />}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate font-medium text-ink-900">{org.name}</p>
+                          <p className="text-xs text-ink-500 capitalize">{org.plan} plan</p>
+                        </div>
+                      </div>
                     </td>
                     <td className="px-5 py-3">
                       <span className={`badge ${org.is_active ? "bg-success/10 text-success" : "bg-danger/10 text-danger"}`}>
@@ -204,7 +211,9 @@ export function OrganizationsPage() {
             {orgs.map((org) => (
               <article key={org.id} className="p-4">
                 <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary"><Building2 size={18} /></div>
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-primary-soft text-primary">
+                    {org.logo_url ? <img src={org.logo_url} alt="" className="max-h-full max-w-full bg-white object-contain p-1" /> : <Building2 size={18} aria-hidden="true" />}
+                  </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <h2 className="font-semibold text-ink-900">{org.name}</h2>
