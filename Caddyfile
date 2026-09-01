@@ -1,4 +1,4 @@
-talkocrm.com, www.talkocrm.com {
+talkocrm.com, www.talkocrm.com, crm.kelpshealthcare.com {
     encode gzip
     reverse_proxy web:80
 }
