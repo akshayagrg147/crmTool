@@ -44,7 +44,11 @@ import type {
   UserOut,
   UserRole,
   AttendanceApprovals,
+  AttendanceLocation,
   AttendanceOverview,
+  AttendanceRecord,
+  AttendanceStatusResponse,
+  AttendanceTeam,
   LeaveRequest,
   PayrollSummary,
   PayrollSchedule,
@@ -263,6 +267,15 @@ export const payrollApi = {
 export const attendanceApi = {
   overview: (month: string) => apiClient.get<AttendanceOverview>("/attendance", { params: { month } }).then((r) => r.data),
   approvals: (month: string) => apiClient.get<AttendanceApprovals>("/attendance/approvals", { params: { month } }).then((r) => r.data),
+  status: () => apiClient.get<AttendanceStatusResponse>("/attendance/status").then((r) => r.data),
+  team: (month: string) => apiClient.get<AttendanceTeam>("/attendance/team", { params: { month } }).then((r) => r.data),
+  location: () => apiClient.get<AttendanceLocation>("/attendance/location").then((r) => r.data),
+  updateLocation: (payload: { name: string; latitude: number; longitude: number; radius_meters: number }) =>
+    apiClient.put<AttendanceLocation>("/attendance/location", payload).then((r) => r.data),
+  checkIn: (payload: { latitude: number; longitude: number; accuracy_meters?: number | null }) =>
+    apiClient.post<AttendanceRecord>("/attendance/check-in", payload).then((r) => r.data),
+  checkOut: (payload: { latitude: number; longitude: number; accuracy_meters?: number | null }) =>
+    apiClient.post<AttendanceRecord>("/attendance/check-out", payload).then((r) => r.data),
   createTimeEntry: (payload: {
     user_id?: string;
     entry_date: string;

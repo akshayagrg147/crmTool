@@ -14,6 +14,7 @@ from app.models.lead_note import LeadAttachment, LeadNote
 from app.models.saved_report import SavedReport
 from app.models.backup import BackupRecord
 from app.models.payroll import (
+    AttendanceRecord,
     EmployeePayrollProfile,
     LeaveRequest,
     OrganizationScheduleException,
@@ -40,6 +41,7 @@ __all__ = [
     "SavedReport",
     "BackupRecord",
     "EmployeePayrollProfile",
+    "AttendanceRecord",
     "OrganizationWorkSchedule",
     "OrganizationScheduleException",
     "TimeEntry",

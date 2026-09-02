@@ -104,6 +104,7 @@ export interface PayrollTimeEntry {
   hours: number;
   category: TimeEntryCategory;
   description: string | null;
+  attendance_record_id: string | null;
   status: TimeEntryStatus;
   submitted_by: string | null;
   submitted_by_name: string | null;
@@ -111,6 +112,45 @@ export interface PayrollTimeEntry {
   reviewed_by_name: string | null;
   reviewed_at: string | null;
   created_at: string;
+}
+
+export type AttendanceStatus = "not_checked_in" | "checked_in" | "checked_out";
+
+export interface AttendanceRecord {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  user_name: string | null;
+  attendance_date: string;
+  checked_in_at: string;
+  checked_out_at: string | null;
+  check_in_accuracy_meters: number | null;
+  check_out_accuracy_meters: number | null;
+  worked_minutes: number;
+  status: Exclude<AttendanceStatus, "not_checked_in">;
+  time_entry_id: string | null;
+}
+
+export interface AttendanceLocation {
+  configured: boolean;
+  name: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  radius_meters: number;
+}
+
+export interface AttendanceStatusResponse {
+  attendance_date: string;
+  status: AttendanceStatus;
+  location_configured: boolean;
+  location_name: string | null;
+  radius_meters: number;
+  record: AttendanceRecord | null;
+}
+
+export interface AttendanceTeam {
+  month: string;
+  records: AttendanceRecord[];
 }
 
 export interface LeaveRequest {
@@ -180,6 +220,7 @@ export interface AttendanceOverview {
   month: string;
   entries: PayrollTimeEntry[];
   leaves: LeaveRequest[];
+  records: AttendanceRecord[];
   pending_approvals: number;
 }
 
