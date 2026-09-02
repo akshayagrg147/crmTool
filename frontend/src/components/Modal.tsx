@@ -115,7 +115,7 @@ export function Modal({ open, onClose, title, children, footer, size = "md" }: M
                 <img src={organizationLogoUrl} alt="" className="h-4 w-4 shrink-0 rounded object-contain" />
               )}
               <p className="truncate text-[9px] font-bold uppercase tracking-[0.17em] text-accent-dark">
-                {organizationName ? `${organizationName} workspace` : "TalkoCRM workspace"}
+                {organizationName ? `${organizationName} workspace` : "Kelps Healthcare workspace"}
               </p>
             </div>
             <h2 id={titleId} className="text-xl font-semibold leading-tight text-ink-900">

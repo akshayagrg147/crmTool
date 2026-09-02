@@ -328,7 +328,7 @@ function PricingCalculator() {
           <p className="mt-5 max-w-md text-sm leading-6 text-white/65">
             {term === 12
               ? `Choose the annual plan and save ${INR.format(PRICING_PLANS[6].monthlyPricePerUser - PRICING_PLANS[12].monthlyPricePerUser)} per user every month.`
-              : "Start with the minimum 6-month commitment and pay only for the people who use TalkoCRM."}
+              : "Start with the minimum 6-month commitment and pay only for the people who use Kelps Healthcare."}
           </p>
 
           <div className="mt-8 border-t border-white/10 pt-7">
@@ -432,7 +432,7 @@ function PricingCalculator() {
             Log in to your workspace
             <ArrowRight size={17} aria-hidden="true" />
           </Link>
-          <p className="mt-3 text-xs leading-5 text-ink-500">Need more than 100 users? TalkoCRM can support a custom rollout for larger teams.</p>
+          <p className="mt-3 text-xs leading-5 text-ink-500">Need more than 100 users? Kelps Healthcare can support a custom rollout for larger teams.</p>
         </div>
       </div>
     </div>
@@ -497,7 +497,7 @@ export function LandingPage() {
             </h1>
 
             <p className="mt-6 max-w-lg text-[15px] leading-7 text-white/70">
-              TalkoCRM routes incoming leads to your team automatically, keeps a complete record of
+              Kelps Healthcare routes incoming leads to your team automatically, keeps a complete record of
               every call and follow-up, and gives admins, managers, and telecallers exactly the view
               they need to do their job well.
             </p>
@@ -575,7 +575,7 @@ export function LandingPage() {
           <Reveal className="mx-auto max-w-2xl text-center">
             <p className="page-eyebrow justify-center">See it in action</p>
             <h2 className="max-w-2xl font-serif text-[2rem] font-semibold leading-tight tracking-[-0.02em] text-white sm:text-[2.3rem]">
-              Watch how TalkoCRM runs your day.
+              Watch how Kelps Healthcare runs your day.
             </h2>
             <p className="mt-3 text-[15px] leading-7 text-white/65">
               A live walkthrough of what happens from the moment a lead arrives to the moment it&apos;s
@@ -716,7 +716,7 @@ export function LandingPage() {
             </div>
           </div>
           <div className="mt-10 flex flex-col items-center gap-4 border-t border-ink-100 pt-6 text-center sm:flex-row sm:justify-between sm:text-left">
-            <p className="text-xs text-ink-500">&copy; {new Date().getFullYear()} TalkoCRM. All rights reserved.</p>
+            <p className="text-xs text-ink-500">&copy; {new Date().getFullYear()} Kelps Healthcare. All rights reserved.</p>
             <p className="flex items-center gap-2 text-xs text-ink-400">
               <Lock size={13} aria-hidden="true" /> Access is provisioned by your organization&apos;s administrator.
             </p>

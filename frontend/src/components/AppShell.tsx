@@ -195,7 +195,7 @@ export function AppShell() {
       <div className="flex min-h-screen" aria-hidden={mobileNavOpen ? true : undefined}>
         <aside className={`sticky hidden w-[248px] shrink-0 flex-col overflow-hidden bg-primary-dark text-white lg:flex ${isImpersonating ? "top-12 h-[calc(100vh-3rem)]" : "top-0 h-screen"}`}>
           <div className="flex h-16 shrink-0 items-center border-b border-white/[0.08] px-5">
-            <BrandLogo size={38} inverse logoUrl={organizationLogoUrl} brandName={organizationName ?? "TalkoCRM"} />
+            <BrandLogo size={38} inverse logoUrl={organizationLogoUrl} brandName={organizationName ?? "Kelps Healthcare"} />
           </div>
 
           <nav aria-label="Primary navigation" className="flex-1 overflow-y-auto px-3 py-5">
@@ -241,7 +241,7 @@ export function AppShell() {
                 </div>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold leading-tight text-ink-900">{currentNav?.label ?? "Workspace"}</p>
-                  <p className="mt-0.5 hidden truncate text-[10px] text-ink-500 sm:block">{organizationName ?? "TalkoCRM"}</p>
+                  <p className="mt-0.5 hidden truncate text-[10px] text-ink-500 sm:block">{organizationName ?? "Kelps Healthcare"}</p>
                 </div>
               </div>
 
@@ -329,7 +329,7 @@ export function AppShell() {
                         <div className="px-3 py-2.5">
                           <p className="truncate text-sm font-semibold text-ink-900">{user?.name}</p>
                           <p className="mt-0.5 text-xs capitalize text-ink-500">{user?.role?.replace("_", " ")}</p>
-                          <p className="mt-1 truncate text-[11px] text-ink-300">{organizationName ?? "TalkoCRM workspace"}</p>
+                          <p className="mt-1 truncate text-[11px] text-ink-300">{organizationName ?? "Kelps Healthcare workspace"}</p>
                         </div>
                         <div className="my-1 h-px bg-ink-100" />
                         <button
@@ -375,7 +375,7 @@ export function AppShell() {
                 inverse
                 subtitle={organizationName ?? "Conversation-led CRM"}
                 logoUrl={organizationLogoUrl}
-                brandName={organizationName ?? "TalkoCRM"}
+                brandName={organizationName ?? "Kelps Healthcare"}
               />
               <button
                 type="button"

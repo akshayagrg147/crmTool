@@ -113,7 +113,7 @@ export function LoginPage() {
 
           <div className="login-brand-footer flex items-center justify-between border-t border-white/10 pt-5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">
             <span>Role-based workspace</span>
-            <span>&copy; {new Date().getFullYear()} TalkoCRM</span>
+            <span>&copy; {new Date().getFullYear()} Kelps Healthcare</span>
           </div>
         </div>
       </aside>

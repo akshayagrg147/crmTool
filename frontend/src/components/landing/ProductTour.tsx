@@ -306,7 +306,7 @@ export function ProductTour() {
           <span className="h-2 w-2 rounded-full bg-white/15" aria-hidden="true" />
           <span className="h-2 w-2 rounded-full bg-white/15" aria-hidden="true" />
           <span className="h-2 w-2 rounded-full bg-white/15" aria-hidden="true" />
-          <span className="ml-3 text-[11px] font-semibold text-white/35">TalkoCRM — {scene.label}</span>
+          <span className="ml-3 text-[11px] font-semibold text-white/35">Kelps Healthcare — {scene.label}</span>
         </div>
         <div className="min-h-[260px]">{scene.render(playKey)}</div>
       </div>

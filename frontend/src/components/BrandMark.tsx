@@ -14,7 +14,10 @@ type BrandLogoProps = BrandMarkProps & {
   brandName?: string;
 };
 
-/** TalkoCRM's conversation-frame monogram, kept code-native for crisp scaling. */
+const DEFAULT_BRAND_NAME = "Kelps Healthcare";
+const DEFAULT_BRAND_LOGO = "/kelps-healthcare-logo.png";
+
+/** Legacy conversation-frame monogram, kept code-native for crisp scaling. */
 export function BrandMark({ size = 40, inverse = false, className = "" }: BrandMarkProps) {
   const field = inverse ? "#F8F4EA" : "#173A5E";
   const line = inverse ? "#173A5E" : "#F8F4EA";
@@ -50,47 +53,34 @@ export function BrandLogo({
   subtitle = "Conversation-led CRM",
   className = "",
   logoUrl,
-  brandName = "TalkoCRM",
+  brandName = DEFAULT_BRAND_NAME,
 }: BrandLogoProps) {
   const [logoFailed, setLogoFailed] = useState(false);
   const hasCustomLogo = Boolean(logoUrl) && !logoFailed;
+  const displayedLogoUrl = hasCustomLogo ? logoUrl! : DEFAULT_BRAND_LOGO;
+  const displayedBrandName = hasCustomLogo ? brandName : DEFAULT_BRAND_NAME;
 
   return (
-    <div className={`flex min-w-0 items-center gap-3 ${className}`} aria-label={brandName}>
-      {hasCustomLogo ? (
-        <div
-          className={`flex shrink-0 items-center justify-center overflow-hidden rounded-lg ${inverse ? "bg-white/10 p-1" : "border border-ink-100 bg-white p-1"}`}
-          style={{ width: Math.max(size * 2.4, 96), height: size }}
+    <div className={`flex min-w-0 items-center gap-3 ${className}`} aria-label={displayedBrandName}>
+      <div
+        className={`flex shrink-0 items-center justify-center overflow-hidden rounded-lg ${inverse ? "bg-white/10 p-1" : "border border-ink-100 bg-white p-1"}`}
+        style={{ width: Math.max(size * 2.4, 96), height: size }}
+      >
+        <img
+          src={displayedLogoUrl}
+          alt={`${displayedBrandName} logo`}
+          className="max-h-full max-w-full object-contain"
+          onError={hasCustomLogo ? () => setLogoFailed(true) : undefined}
+        />
+      </div>
+      {subtitle && !hasCustomLogo && (
+        <p
+          className={`hidden truncate text-[9px] font-bold uppercase tracking-[0.16em] sm:block ${
+            inverse ? "text-white/45" : "text-ink-300"
+          }`}
         >
-          <img
-            src={logoUrl!}
-            alt={`${brandName} logo`}
-            className="max-h-full max-w-full object-contain"
-            onError={() => setLogoFailed(true)}
-          />
-        </div>
-      ) : (
-        <>
-          <BrandMark size={size} inverse={inverse} className="shrink-0" />
-          <div className="min-w-0">
-            <p
-              className={`whitespace-nowrap font-sans text-[19px] font-bold leading-none tracking-[-0.035em] ${
-                inverse ? "text-white" : "text-primary-dark"
-              }`}
-            >
-              Talko<span className="text-accent">CRM</span>
-            </p>
-            {subtitle && (
-              <p
-                className={`mt-1 truncate text-[9px] font-bold uppercase tracking-[0.16em] ${
-                  inverse ? "text-white/45" : "text-ink-300"
-                }`}
-              >
-                {subtitle}
-              </p>
-            )}
-          </div>
-        </>
+          {subtitle}
+        </p>
       )}
     </div>
   );
