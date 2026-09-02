@@ -16,6 +16,7 @@ type BrandLogoProps = BrandMarkProps & {
 
 const DEFAULT_BRAND_NAME = "Kelps Healthcare";
 const DEFAULT_BRAND_LOGO = "/kelps-healthcare-logo.png";
+const DEFAULT_BRAND_LOGO_INVERSE = "/kelps-healthcare-logo-inverse.png";
 
 /** Legacy conversation-frame monogram, kept code-native for crisp scaling. */
 export function BrandMark({ size = 40, inverse = false, className = "" }: BrandMarkProps) {
@@ -57,7 +58,7 @@ export function BrandLogo({
 }: BrandLogoProps) {
   const [logoFailed, setLogoFailed] = useState(false);
   const hasCustomLogo = Boolean(logoUrl) && !logoFailed;
-  const displayedLogoUrl = hasCustomLogo ? logoUrl! : DEFAULT_BRAND_LOGO;
+  const displayedLogoUrl = hasCustomLogo ? logoUrl! : inverse ? DEFAULT_BRAND_LOGO_INVERSE : DEFAULT_BRAND_LOGO;
   const displayedBrandName = hasCustomLogo ? brandName : DEFAULT_BRAND_NAME;
 
   return (
