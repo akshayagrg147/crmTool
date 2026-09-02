@@ -290,7 +290,9 @@ export function LandingPageV2() {
 
       <header className="sticky top-0 z-50 border-b border-ink-100/80 bg-bg/90 backdrop-blur-xl">
         <div className="mx-auto flex h-[72px] max-w-[1280px] items-center justify-between gap-4 px-5 sm:px-8">
-          <Link to="/" aria-label="Kelps Healthcare home"><BrandLogo size={38} subtitle="" /></Link>
+          <Link to="/" aria-label="Kelps Healthcare home" className="shrink-0">
+            <BrandLogo size={54} subtitle="" />
+          </Link>
           <nav className="hidden items-center gap-8 text-sm font-semibold text-ink-500 lg:flex" aria-label="Primary navigation">
             {navLinks.map((item) => <a key={item.href} href={item.href} className="transition-colors hover:text-primary-dark">{item.label}</a>)}
           </nav>
