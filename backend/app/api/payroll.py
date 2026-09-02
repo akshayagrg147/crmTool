@@ -1,24 +1,35 @@
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
+from math import asin, cos, radians, sin, sqrt
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import CurrentUser, require_admin, require_admin_or_manager, require_org_user
 from app.models.payroll import (
+    AttendanceRecord,
     EmployeePayrollProfile,
     LeaveRequest,
     OrganizationScheduleException,
     OrganizationWorkSchedule,
     TimeEntry,
 )
+from app.models.organization import Organization
 from app.models.user import User, UserRole
 from app.schemas.payroll import (
     AttendanceApprovalsOut,
+    AttendanceCheckIn,
+    AttendanceCheckOut,
+    AttendanceLocationOut,
+    AttendanceLocationUpdate,
     AttendanceOverviewOut,
+    AttendanceRecordOut,
+    AttendanceStatusOut,
+    AttendanceTeamOut,
     LeaveRequestCreate,
     LeaveRequestOut,
     LeaveRequestReview,
@@ -97,6 +108,79 @@ def _decimal(value: object | None) -> Decimal:
     return Decimal(str(value or 0))
 
 
+def _distance_meters(latitude_a: float, longitude_a: float, latitude_b: float, longitude_b: float) -> float:
+    """Return the great-circle distance between two WGS84 coordinates."""
+    earth_radius_meters = 6_371_000
+    lat_a, lat_b = radians(latitude_a), radians(latitude_b)
+    delta_lat = radians(latitude_b - latitude_a)
+    delta_lon = radians(longitude_b - longitude_a)
+    haversine = sin(delta_lat / 2) ** 2 + cos(lat_a) * cos(lat_b) * sin(delta_lon / 2) ** 2
+    return earth_radius_meters * 2 * asin(sqrt(min(1, haversine)))
+
+
+def _location_configured(organization: Organization) -> bool:
+    return (
+        getattr(organization, "attendance_latitude", None) is not None
+        and getattr(organization, "attendance_longitude", None) is not None
+    )
+
+
+def _location_out(organization: Organization, include_coordinates: bool = False) -> AttendanceLocationOut:
+    configured = _location_configured(organization)
+    return AttendanceLocationOut(
+        configured=configured,
+        name=getattr(organization, "attendance_location_name", None),
+        latitude=float(organization.attendance_latitude) if configured and include_coordinates else None,
+        longitude=float(organization.attendance_longitude) if configured and include_coordinates else None,
+        radius_meters=int(organization.attendance_radius_meters or 200),
+    )
+
+
+def _assert_inside_location(organization: Organization, latitude: float, longitude: float) -> None:
+    if not _location_configured(organization):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Attendance location has not been configured by an admin")
+    distance = _distance_meters(
+        latitude,
+        longitude,
+        float(organization.attendance_latitude),
+        float(organization.attendance_longitude),
+    )
+    radius = int(organization.attendance_radius_meters or 200)
+    if distance > radius:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            f"You are about {round(distance)} m away from {organization.attendance_location_name or 'the workplace'}. Check-in is allowed within {radius} m.",
+        )
+
+
+def _attendance_out(record: AttendanceRecord, users: dict[uuid.UUID, User], now: datetime | None = None) -> AttendanceRecordOut:
+    current_time = now or datetime.now(timezone.utc)
+    end = record.checked_out_at or current_time
+    worked_minutes = max(0, round((end - record.checked_in_at).total_seconds() / 60))
+    user = users.get(record.user_id)
+    return AttendanceRecordOut(
+        id=record.id,
+        organization_id=record.organization_id,
+        user_id=record.user_id,
+        user_name=user.name if user else None,
+        attendance_date=record.attendance_date,
+        checked_in_at=record.checked_in_at,
+        checked_out_at=record.checked_out_at,
+        check_in_accuracy_meters=float(record.check_in_accuracy_meters) if record.check_in_accuracy_meters is not None else None,
+        check_out_accuracy_meters=float(record.check_out_accuracy_meters) if record.check_out_accuracy_meters is not None else None,
+        worked_minutes=worked_minutes,
+        status="checked_out" if record.checked_out_at else "checked_in",
+    )
+
+
+async def _organization(db: AsyncSession, organization_id: uuid.UUID) -> Organization:
+    result = await db.execute(select(Organization).where(Organization.id == organization_id))
+    organization = result.scalar_one_or_none()
+    if organization is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Organization not found")
+    return organization
+
+
 def _role_can_review(current: CurrentUser, target: User) -> bool:
     return current.role == UserRole.admin or (current.role == UserRole.manager and target.role == UserRole.telecaller)
 
@@ -114,6 +198,7 @@ def _time_out(entry: TimeEntry, users: dict[uuid.UUID, User]) -> TimeEntryOut:
         hours=float(entry.hours or 0),
         category=entry.category,
         description=entry.description,
+        attendance_record_id=entry.attendance_record_id,
         status=entry.status,
         submitted_by=entry.submitted_by,
         submitted_by_name=submitted_by.name if submitted_by else None,
@@ -428,6 +513,174 @@ async def update_payroll_rate(
     return PayrollRateOut(user_id=user_id, hourly_rate=payload.hourly_rate, standard_hours_per_day=payload.standard_hours_per_day)
 
 
+@attendance_router.get("/location", response_model=AttendanceLocationOut)
+async def get_attendance_location(
+    current: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    organization = await _organization(db, current.organization_id)
+    return _location_out(organization, include_coordinates=True)
+
+
+@attendance_router.put("/location", response_model=AttendanceLocationOut)
+async def update_attendance_location(
+    payload: AttendanceLocationUpdate,
+    current: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    organization = await _organization(db, current.organization_id)
+    organization.attendance_location_name = payload.name
+    organization.attendance_latitude = payload.latitude
+    organization.attendance_longitude = payload.longitude
+    organization.attendance_radius_meters = payload.radius_meters
+    await db.commit()
+    await db.refresh(organization)
+    return _location_out(organization, include_coordinates=True)
+
+
+@attendance_router.get("/status", response_model=AttendanceStatusOut)
+async def attendance_status(
+    current: CurrentUser = Depends(require_org_user),
+    db: AsyncSession = Depends(get_db),
+):
+    organization = await _organization(db, current.organization_id)
+    today = datetime.now(timezone.utc).date()
+    result = await db.execute(
+        select(AttendanceRecord).where(
+            AttendanceRecord.organization_id == current.organization_id,
+            AttendanceRecord.user_id == current.id,
+            AttendanceRecord.attendance_date == today,
+        )
+    )
+    record = result.scalar_one_or_none()
+    users = {user.id: user for user in await _org_users(db, current.organization_id)}
+    return AttendanceStatusOut(
+        attendance_date=today,
+        status="checked_out" if record and record.checked_out_at else "checked_in" if record else "not_checked_in",
+        location_configured=_location_configured(organization),
+        location_name=organization.attendance_location_name,
+        radius_meters=int(organization.attendance_radius_meters or 200),
+        record=_attendance_out(record, users) if record else None,
+    )
+
+
+@attendance_router.post("/check-in", response_model=AttendanceRecordOut, status_code=status.HTTP_201_CREATED)
+async def check_in(
+    payload: AttendanceCheckIn,
+    current: CurrentUser = Depends(require_org_user),
+    db: AsyncSession = Depends(get_db),
+):
+    organization = await _organization(db, current.organization_id)
+    _assert_inside_location(organization, payload.latitude, payload.longitude)
+    today = datetime.now(timezone.utc).date()
+    result = await db.execute(
+        select(AttendanceRecord).where(
+            AttendanceRecord.organization_id == current.organization_id,
+            AttendanceRecord.user_id == current.id,
+            AttendanceRecord.attendance_date == today,
+        )
+    )
+    if result.scalar_one_or_none() is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Attendance has already been recorded for today")
+    record = AttendanceRecord(
+        organization_id=current.organization_id,
+        user_id=current.id,
+        attendance_date=today,
+        checked_in_at=datetime.now(timezone.utc),
+        check_in_latitude=payload.latitude,
+        check_in_longitude=payload.longitude,
+        check_in_accuracy_meters=payload.accuracy_meters,
+    )
+    db.add(record)
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "Attendance has already been recorded for today") from exc
+    await db.refresh(record)
+    users = {user.id: user for user in await _org_users(db, current.organization_id)}
+    return _attendance_out(record, users)
+
+
+@attendance_router.post("/check-out", response_model=AttendanceRecordOut)
+async def check_out(
+    payload: AttendanceCheckOut,
+    current: CurrentUser = Depends(require_org_user),
+    db: AsyncSession = Depends(get_db),
+):
+    organization = await _organization(db, current.organization_id)
+    _assert_inside_location(organization, payload.latitude, payload.longitude)
+    today = datetime.now(timezone.utc).date()
+    result = await db.execute(
+        select(AttendanceRecord)
+        .where(
+            AttendanceRecord.organization_id == current.organization_id,
+            AttendanceRecord.user_id == current.id,
+            AttendanceRecord.attendance_date == today,
+        )
+        .with_for_update()
+    )
+    record = result.scalar_one_or_none()
+    if record is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Check in before checking out")
+    if record.checked_out_at is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Attendance has already been checked out for today")
+    checked_out_at = datetime.now(timezone.utc)
+    record.checked_out_at = checked_out_at
+    record.check_out_latitude = payload.latitude
+    record.check_out_longitude = payload.longitude
+    record.check_out_accuracy_meters = payload.accuracy_meters
+    worked_seconds = max(0, (checked_out_at - record.checked_in_at).total_seconds())
+    # Keep the existing payroll approval flow: an attendance session becomes a
+    # pending calling entry after check-out, so an admin/manager can approve it.
+    if worked_seconds >= 60:
+        db.add(
+            TimeEntry(
+                organization_id=current.organization_id,
+                user_id=current.id,
+                entry_date=record.attendance_date,
+                hours=round(worked_seconds / 3600, 2),
+                category="calling",
+                description="Attendance check-in session",
+                attendance_record_id=record.id,
+                status="pending",
+                submitted_by=current.id,
+            )
+        )
+    await db.commit()
+    await db.refresh(record)
+    users = {user.id: user for user in await _org_users(db, current.organization_id)}
+    return _attendance_out(record, users)
+
+
+@attendance_router.get("/team", response_model=AttendanceTeamOut)
+async def attendance_team(
+    month: str | None = Query(default=None),
+    current: CurrentUser = Depends(require_admin_or_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    month_value, month_start, month_end = _month_window(month)
+    users = await _org_users(db, current.organization_id)
+    visible_ids = {user.id for user in users}
+    if current.role == UserRole.manager:
+        visible_ids = {user.id for user in users if user.id == current.id or user.role == UserRole.telecaller}
+    result = await db.execute(
+        select(AttendanceRecord)
+        .where(
+            AttendanceRecord.organization_id == current.organization_id,
+            AttendanceRecord.attendance_date >= month_start,
+            AttendanceRecord.attendance_date < month_end,
+            AttendanceRecord.user_id.in_(visible_ids) if visible_ids else False,
+        )
+        .order_by(AttendanceRecord.attendance_date.desc(), AttendanceRecord.checked_in_at.desc())
+    )
+    user_map = {user.id: user for user in users}
+    return AttendanceTeamOut(
+        month=month_value,
+        records=[_attendance_out(record, user_map) for record in result.scalars().all()],
+    )
+
+
 @attendance_router.get("", response_model=AttendanceOverviewOut)
 async def attendance_overview(
     month: str | None = Query(default=None),
@@ -453,6 +706,15 @@ async def attendance_overview(
             LeaveRequest.end_date >= month_start,
         ).order_by(LeaveRequest.start_date.desc(), LeaveRequest.created_at.desc())
     )
+    records_result = await db.execute(
+        select(AttendanceRecord).where(
+            AttendanceRecord.organization_id == current.organization_id,
+            AttendanceRecord.user_id == current.id,
+            AttendanceRecord.attendance_date >= month_start,
+            AttendanceRecord.attendance_date < month_end,
+        ).order_by(AttendanceRecord.attendance_date.desc(), AttendanceRecord.checked_in_at.desc())
+    )
+    records = list(records_result.scalars().all())
     pending_count = 0
     if current.role in (UserRole.admin, UserRole.manager):
         pending_entries_result = await db.execute(
@@ -487,6 +749,7 @@ async def attendance_overview(
         month=month_value,
         entries=[_time_out(entry, user_map) for entry in entries_result.scalars().all()],
         leaves=[_leave_out(leave, user_map) for leave in leaves_result.scalars().all()],
+        records=[_attendance_out(record, user_map) for record in records],
         pending_approvals=pending_count,
     )
 

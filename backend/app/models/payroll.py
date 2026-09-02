@@ -68,6 +68,35 @@ class OrganizationScheduleException(Base):
     )
 
 
+class AttendanceRecord(Base):
+    """A geofenced check-in/out session for one employee on one day."""
+
+    __tablename__ = "attendance_records"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    attendance_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    checked_in_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    checked_out_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    check_in_latitude: Mapped[float] = mapped_column(Numeric(9, 6), nullable=False)
+    check_in_longitude: Mapped[float] = mapped_column(Numeric(9, 6), nullable=False)
+    check_in_accuracy_meters: Mapped[float | None] = mapped_column(Numeric(8, 2), nullable=True)
+    check_out_latitude: Mapped[float | None] = mapped_column(Numeric(9, 6), nullable=True)
+    check_out_longitude: Mapped[float | None] = mapped_column(Numeric(9, 6), nullable=True)
+    check_out_accuracy_meters: Mapped[float | None] = mapped_column(Numeric(8, 2), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("organization_id", "user_id", "attendance_date", name="uq_attendance_record_org_user_date"),
+    )
+
+
 class TimeEntry(Base):
     """A submitted work block. Only approved hours enter payroll calculations."""
 
@@ -84,6 +113,9 @@ class TimeEntry(Base):
     hours: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False, default=0)
     category: Mapped[str] = mapped_column(String(40), nullable=False, default="calling")
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attendance_record_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("attendance_records.id", ondelete="SET NULL"), nullable=True, unique=True, index=True
+    )
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", index=True)
     submitted_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     reviewed_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)

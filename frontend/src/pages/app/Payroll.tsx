@@ -235,7 +235,7 @@ export function PayrollPage() {
             <div className="rounded-xl bg-white p-2.5 text-primary shadow-sm"><CalendarClock size={19} /></div>
             <div>
               <div className="flex flex-wrap items-center gap-2"><h2 className="panel-header font-semibold text-ink-900">Attendance approvals</h2><span className="badge bg-primary-soft text-primary-dark">Admin review</span></div>
-              <p className="mt-1.5 max-w-2xl text-xs leading-5 text-ink-600">Review team work-time and leave requests from the attendance queue. Admin accounts do not submit personal attendance or leave requests.</p>
+              <p className="mt-1.5 max-w-2xl text-xs leading-5 text-ink-600">Review team work-time and leave requests from the attendance queue. Admins can record workplace check-in/out, while personal manual time and leave requests remain disabled.</p>
             </div>
           </div>
           <Link to="/attendance#attendance-approvals" className="btn-ghost shrink-0 px-3 py-2 text-xs">Open approvals <ArrowRight size={14} /></Link>

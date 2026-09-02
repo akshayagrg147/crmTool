@@ -10,6 +10,7 @@ from app.models.user import UserRole
 TimeEntryCategory = Literal["calling", "event", "training", "admin", "other"]
 TimeEntryStatus = Literal["pending", "approved", "rejected"]
 LeaveStatus = Literal["pending", "approved", "rejected"]
+AttendanceStatus = Literal["not_checked_in", "checked_in", "checked_out"]
 
 
 class PayrollRateUpdate(BaseModel):
@@ -104,6 +105,7 @@ class TimeEntryOut(BaseModel):
     hours: float
     category: str
     description: str | None
+    attendance_record_id: uuid.UUID | None
     status: str
     submitted_by: uuid.UUID | None
     submitted_by_name: str | None = None
@@ -111,6 +113,70 @@ class TimeEntryOut(BaseModel):
     reviewed_by_name: str | None = None
     reviewed_at: datetime | None
     created_at: datetime
+
+
+class AttendanceLocationUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    radius_meters: int = Field(default=200, ge=25, le=5000)
+
+    @field_validator("name")
+    @classmethod
+    def clean_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("A workplace name is required")
+        return value
+
+
+class AttendanceLocationOut(BaseModel):
+    configured: bool
+    name: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    radius_meters: int = 200
+
+
+class AttendanceRecordOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    organization_id: uuid.UUID
+    user_id: uuid.UUID
+    user_name: str | None = None
+    attendance_date: date
+    checked_in_at: datetime
+    checked_out_at: datetime | None
+    check_in_accuracy_meters: float | None
+    check_out_accuracy_meters: float | None
+    worked_minutes: int
+    status: AttendanceStatus
+    time_entry_id: uuid.UUID | None = None
+
+
+class AttendanceCheckIn(BaseModel):
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    accuracy_meters: float | None = Field(default=None, ge=0, le=10000)
+
+
+class AttendanceCheckOut(AttendanceCheckIn):
+    pass
+
+
+class AttendanceStatusOut(BaseModel):
+    attendance_date: date
+    status: AttendanceStatus
+    location_configured: bool
+    location_name: str | None = None
+    radius_meters: int = 200
+    record: AttendanceRecordOut | None = None
+
+
+class AttendanceTeamOut(BaseModel):
+    month: str
+    records: list[AttendanceRecordOut] = Field(default_factory=list)
 
 
 class LeaveRequestCreate(BaseModel):
@@ -184,6 +250,7 @@ class AttendanceOverviewOut(BaseModel):
     month: str
     entries: list[TimeEntryOut]
     leaves: list[LeaveRequestOut]
+    records: list[AttendanceRecordOut] = Field(default_factory=list)
     pending_approvals: int
 
 
