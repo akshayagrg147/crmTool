@@ -56,6 +56,10 @@ import type {
   PayrollTimeEntry,
   TimeEntryCategory,
   TimeEntryStatus,
+  WhatsAppInstanceOut,
+  WhatsAppMessagePage,
+  WhatsAppMessageOut,
+  WhatsAppOverview,
 } from "./types";
 
 export interface TokenPair {
@@ -371,6 +375,23 @@ export const integrationsApi = {
     apiClient.delete<IntegrationOut>(`/integrations/${provider}`).then((r) => r.data),
   sync: (provider: IntegrationProvider) =>
     apiClient.post<SyncResult>(`/integrations/${provider}/sync`).then((r) => r.data),
+};
+
+export const whatsappApi = {
+  overview: () => apiClient.get<WhatsAppOverview>("/whatsapp/overview").then((r) => r.data),
+  instances: () => apiClient.get<WhatsAppInstanceOut[]>("/whatsapp/instances").then((r) => r.data),
+  create: (payload: { assigned_user_id: string; label: string; phone_number?: string | null }) =>
+    apiClient.post<WhatsAppInstanceOut>("/whatsapp/instances", payload).then((r) => r.data),
+  update: (id: string, payload: Partial<{ assigned_user_id: string; label: string; phone_number: string | null; is_enabled: boolean }>) =>
+    apiClient.patch<WhatsAppInstanceOut>(`/whatsapp/instances/${id}`, payload).then((r) => r.data),
+  connect: (id: string) => apiClient.post<WhatsAppInstanceOut>(`/whatsapp/instances/${id}/connect`).then((r) => r.data),
+  disconnect: (id: string) => apiClient.post<WhatsAppInstanceOut>(`/whatsapp/instances/${id}/disconnect`).then((r) => r.data),
+  rotateToken: (id: string) => apiClient.post<WhatsAppInstanceOut>(`/whatsapp/instances/${id}/rotate-token`).then((r) => r.data),
+  remove: (id: string) => apiClient.delete(`/whatsapp/instances/${id}`).then((r) => r.data),
+  messages: (id: string, page = 1, pageSize = 50) =>
+    apiClient.get<WhatsAppMessagePage>(`/whatsapp/instances/${id}/messages`, { params: { page, page_size: pageSize } }).then((r) => r.data),
+  markRead: (instanceId: string, messageId: string) =>
+    apiClient.post<WhatsAppMessageOut>(`/whatsapp/instances/${instanceId}/messages/${messageId}/read`).then((r) => r.data),
 };
 
 export const superAdminApi = {

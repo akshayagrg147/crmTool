@@ -19,6 +19,7 @@ from app.api import (
     tasks,
     users,
     workspace,
+    whatsapp,
 )
 from app.core.config import settings
 from app.core.limiter import limiter
@@ -55,6 +56,8 @@ app.include_router(security.router, prefix="/api")
 app.include_router(workspace.router, prefix="/api")
 app.include_router(payroll.payroll_router, prefix="/api")
 app.include_router(payroll.attendance_router, prefix="/api")
+app.include_router(whatsapp.router, prefix="/api")
+app.include_router(whatsapp.webhook_router, prefix="/api")
 
 
 @app.on_event("startup")

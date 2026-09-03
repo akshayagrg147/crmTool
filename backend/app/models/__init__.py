@@ -21,6 +21,7 @@ from app.models.payroll import (
     OrganizationWorkSchedule,
     TimeEntry,
 )
+from app.models.whatsapp import WhatsAppInstance, WhatsAppInstanceStatus, WhatsAppMessage, WhatsAppMessageDirection
 
 __all__ = [
     "Organization",
@@ -46,4 +47,8 @@ __all__ = [
     "OrganizationScheduleException",
     "TimeEntry",
     "LeaveRequest",
+    "WhatsAppInstance",
+    "WhatsAppInstanceStatus",
+    "WhatsAppMessage",
+    "WhatsAppMessageDirection",
 ]

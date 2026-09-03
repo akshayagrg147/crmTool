@@ -91,7 +91,7 @@ The web app is now live at `http://localhost:5173`.
   seed.py
 /frontend
   /src
-    /pages/app          Dashboard, Leads, Team, Analytics, Attendance, Payroll
+    /pages/app          Dashboard, Leads, Team, Analytics, Attendance, Payroll, WhatsApp tracking
     /pages/super-admin   Organizations
     /components
     /api                axios client + endpoint wrappers
@@ -109,6 +109,7 @@ The web app is now live at `http://localhost:5173`.
 - Attendance and payroll are separated by role: Managers and telecallers can submit work-time and leave requests; Admins review and approve team requests, set each employee's hourly rate, and calculate approved-hours pay in the private Payroll workspace. Admin accounts are review-only for personal attendance and leave. Logged calls are captured automatically as approved calling time; extra categories such as events, training, and admin work can be logged separately.
 - Payroll uses each organization's configurable work schedule (Monday-Friday by default, with optional Saturdays/Sundays), daily target hours, and date overrides for holidays or one-off working days. Estimated pay is calculated from approved hours only; pending and rejected submissions are excluded, while approved leave days and schedule targets are shown alongside each employee's monthly totals.
 - Real telephony, billing, and Firebase/BaaS integrations are intentionally out of scope for this phase.
+- WhatsApp tracking is admin-only. Admins can create multiple named instances per employee, rotate each bridge token, and review the messages delivered by that instance. A separate WhatsApp Web bridge (or an approved WhatsApp provider) must run the sessions and POST `status` or `message` events to the instance webhook using the one-time `X-WhatsApp-Token` shown after creation. The CRM does not store WhatsApp passwords or expose employee messages to managers/telecallers.
 
 ## Production deployment
 

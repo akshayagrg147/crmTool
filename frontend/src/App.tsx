@@ -17,6 +17,7 @@ import { TeamPage } from "@/pages/app/Team";
 import { AnalyticsPage } from "@/pages/app/Analytics";
 import { AttendancePage } from "@/pages/app/Attendance";
 import { PayrollPage } from "@/pages/app/Payroll";
+import { WhatsAppPage } from "@/pages/app/WhatsApp";
 import { SuperAdminShell } from "@/pages/super-admin/SuperAdminShell";
 import { OrganizationsPage } from "@/pages/super-admin/Organizations";
 
@@ -88,6 +89,14 @@ export function App() {
           element={
             <ProtectedRoute roles={["admin"]}>
               <PayrollPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/whatsapp"
+          element={
+            <ProtectedRoute roles={["admin"]}>
+              <WhatsAppPage />
             </ProtectedRoute>
           }
         />

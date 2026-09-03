@@ -21,6 +21,7 @@ import {
   SlidersHorizontal,
   CalendarClock,
   Wallet,
+  MessageCircleMore,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { BrandLogo } from "@/components/BrandMark";
@@ -37,6 +38,7 @@ const navItems = [
   { to: "/integrations", label: "Lead Sources", icon: Plug, section: "Operations", roles: ["admin", "manager"] },
   { to: "/attendance", label: "Attendance & Leave", icon: CalendarClock, section: "Operations", roles: ["admin", "manager", "telecaller"] },
   { to: "/payroll", label: "Payroll", icon: Wallet, section: "Operations", roles: ["admin"] },
+  { to: "/whatsapp", label: "WhatsApp tracking", icon: MessageCircleMore, section: "Operations", roles: ["admin"] },
   { to: "/workspace-settings", label: "Workspace Controls", icon: SlidersHorizontal, section: "Operations", roles: ["admin", "manager", "telecaller"] },
   { to: "/analytics", label: "Analytics", icon: BarChart3, section: "Intelligence", roles: ["admin", "manager", "telecaller"] },
 ];

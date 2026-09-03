@@ -6,6 +6,70 @@ export type LeadCategory = string;
 export type IntegrationProvider = "indiamart" | "justdial";
 export type IntegrationStatus = "disconnected" | "active" | "error";
 
+export type WhatsAppInstanceStatus = "disconnected" | "connecting" | "connected" | "paused" | "error";
+export type WhatsAppMessageDirection = "inbound" | "outbound";
+
+export interface WhatsAppInstanceOut {
+  id: string;
+  assigned_user_id: string;
+  assigned_user_name: string;
+  assigned_user_role: UserRole;
+  label: string;
+  phone_number: string | null;
+  session_key: string;
+  status: WhatsAppInstanceStatus;
+  is_enabled: boolean;
+  last_connected_at: string | null;
+  last_seen_at: string | null;
+  last_message_at: string | null;
+  last_error: string | null;
+  message_count: number;
+  unread_count: number;
+  created_at: string;
+  webhook_url: string;
+  webhook_token: string | null;
+}
+
+export interface WhatsAppMessageOut {
+  id: string;
+  instance_id: string;
+  lead_id: string | null;
+  external_message_id: string | null;
+  contact_phone: string;
+  contact_name: string | null;
+  direction: WhatsAppMessageDirection;
+  message_type: string;
+  body: string;
+  is_read: boolean;
+  sent_at: string;
+  created_at: string;
+}
+
+export interface WhatsAppMessagePage {
+  items: WhatsAppMessageOut[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export interface WhatsAppEmployeeSummary {
+  user_id: string;
+  user_name: string;
+  user_role: UserRole;
+  instances: number;
+  connected_instances: number;
+  messages: number;
+  unread_messages: number;
+}
+
+export interface WhatsAppOverview {
+  total_instances: number;
+  connected_instances: number;
+  total_messages: number;
+  unread_messages: number;
+  employees: WhatsAppEmployeeSummary[];
+}
+
 export interface CredentialField {
   key: string;
   label: string;
