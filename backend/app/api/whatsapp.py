@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
-from sqlalchemy import Integer, func, select
+from sqlalchemy import Integer, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -42,6 +42,46 @@ def _phone_from_value(value: str | None) -> str | None:
         text = user
     text = text.split(":", 1)[0].lstrip("+")
     return text if text.isdigit() and 5 <= len(text) <= 20 else None
+
+
+def _is_unresolved_contact(value: str | None, chat_id: str | None = None) -> bool:
+    """Identify placeholders and anonymous LIDs that must not be shown as phone numbers."""
+    if not value:
+        return True
+    normalized = value.strip().lower()
+    if normalized in {"unknown contact", "unknown", "phone unavailable", "group chat"}:
+        return True
+    if chat_id and chat_id.endswith("@lid"):
+        chat_user = chat_id.split("@", 1)[0].split(":", 1)[0]
+        if value == chat_user:
+            return True
+    return False
+
+
+async def _known_contact_phone(
+    db: AsyncSession,
+    instance_id: uuid.UUID,
+    chat_id: str,
+) -> str | None:
+    """Find a real phone number learned from an inbound message in this chat."""
+    result = await db.execute(
+        select(WhatsAppMessage.contact_phone)
+        .where(
+            WhatsAppMessage.instance_id == instance_id,
+            WhatsAppMessage.chat_id == chat_id,
+            WhatsAppMessage.chat_type == WhatsAppChatType.direct.value,
+            WhatsAppMessage.direction == WhatsAppMessageDirection.inbound.value,
+        )
+        .order_by(WhatsAppMessage.sent_at.desc())
+        .limit(20)
+    )
+    for value in result.scalars():
+        if _is_unresolved_contact(value, chat_id):
+            continue
+        phone = _phone_from_value(value)
+        if phone:
+            return phone
+    return None
 
 
 def _webhook_url(instance_id: uuid.UUID) -> str:
@@ -505,8 +545,17 @@ async def receive_webhook(
     else:
         contact_phone = _phone_from_value(payload.contact_phone)
         if not contact_phone:
-            contact_phone = _phone_from_value(payload.sender_phone if payload.direction == WhatsAppMessageDirection.inbound else payload.recipient_phone) or "Unknown contact"
+            contact_phone = _phone_from_value(payload.sender_phone if payload.direction == WhatsAppMessageDirection.inbound else payload.recipient_phone)
+        if not contact_phone:
+            # WhatsApp Web can identify a direct chat only by an anonymous LID
+            # on outbound events. Reuse the number learned from an inbound
+            # message in the same conversation when it becomes available.
+            contact_phone = await _known_contact_phone(db, instance.id, chat_id)
+        contact_phone = contact_phone or "Unknown contact"
     chat_name = payload.chat_name.strip() if payload.chat_name else None
+    recipient_phone = _phone_from_value(payload.recipient_phone)
+    if chat_type == WhatsAppChatType.direct and payload.direction == WhatsAppMessageDirection.outbound and not recipient_phone:
+        recipient_phone = _known_contact_phone(db, instance.id, chat_id)
     message = WhatsAppMessage(
         organization_id=instance.organization_id,
         instance_id=instance.id,
@@ -519,7 +568,7 @@ async def receive_webhook(
         chat_name=chat_name,
         sender_phone=_phone_from_value(payload.sender_phone),
         sender_name=payload.sender_name.strip() if payload.sender_name else None,
-        recipient_phone=_phone_from_value(payload.recipient_phone),
+        recipient_phone=recipient_phone,
         recipient_name=payload.recipient_name.strip() if payload.recipient_name else None,
         direction=payload.direction.value,
         message_type=payload.message_type,
@@ -533,5 +582,29 @@ async def receive_webhook(
     instance.last_message_at = max(instance.last_message_at, sent_at) if instance.last_message_at else sent_at
     instance.last_error = None
     db.add(message)
+    if chat_type == WhatsAppChatType.direct and not _is_unresolved_contact(contact_phone, chat_id):
+        # Backfill earlier outbound messages from the same LID conversation.
+        # This handles the common case where the first outbound event arrives
+        # before WhatsApp exposes the contact's phone number on an inbound
+        # event.
+        unresolved_values = ["Unknown contact", "unknown", "Phone unavailable"]
+        if chat_id.endswith("@lid"):
+            chat_user = chat_id.split("@", 1)[0].split(":", 1)[0]
+            if chat_user.isdigit():
+                unresolved_values.append(chat_user)
+        await db.execute(
+            update(WhatsAppMessage)
+            .where(
+                WhatsAppMessage.instance_id == instance.id,
+                WhatsAppMessage.chat_id == chat_id,
+                WhatsAppMessage.chat_type == WhatsAppChatType.direct.value,
+                WhatsAppMessage.direction == WhatsAppMessageDirection.outbound.value,
+                or_(
+                    WhatsAppMessage.contact_phone.in_(unresolved_values),
+                    WhatsAppMessage.recipient_phone.is_(None),
+                ),
+            )
+            .values(contact_phone=contact_phone, recipient_phone=contact_phone)
+        )
     await db.commit()
     return {"accepted": 1, "message": "Message recorded"}

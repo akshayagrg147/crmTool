@@ -6,6 +6,8 @@ import makeWASocket, {
   fetchLatestWaWebVersion,
   makeCacheableSignalKeyStore,
   useMultiFileAuthState,
+  USyncQuery,
+  USyncUser,
 } from "@whiskeysockets/baileys";
 import pino from "pino";
 import QRCode from "qrcode";
@@ -90,6 +92,47 @@ function phoneForParty(session, jid, alternates = []) {
   return null;
 }
 
+async function phoneForPartyWithLookup(session, socket, jid, alternates = []) {
+  const knownPhone = phoneForParty(session, jid, alternates);
+  if (knownPhone) return knownPhone;
+
+  for (const value of [jid, ...alternates]) {
+    if (!value || typeof value !== "string" || !value.endsWith("@lid")) continue;
+    session.lidLookups ||= new Map();
+    const normalizedLid = value.split(":", 1)[0] + "@lid";
+    let lookup = session.lidLookups.get(normalizedLid);
+    if (!lookup) {
+      lookup = (async () => {
+        try {
+          // WhatsApp's USync LID protocol can return the phone JID paired
+          // with an anonymous conversation identifier. This is needed for
+          // outbound events, where the message key often contains only the
+          // recipient's @lid and no sender_pn/participant_pn field.
+          const query = new USyncQuery()
+            .withContext("message")
+            .withContactProtocol()
+            .withLIDProtocol()
+            .withUser(new USyncUser().withId(normalizedLid));
+          const result = await socket.executeUSyncQuery(query);
+          const match = result?.list?.find((item) => item.id === normalizedLid || item.lid === normalizedLid) || result?.list?.[0];
+          const phone = phoneFromValue(match?.id) || phoneFromValue(match?.jid);
+          if (phone) rememberLidPhone(session, normalizedLid, phone);
+          return phone;
+        } catch (error) {
+          logger.debug({ err: error, lid: normalizedLid, sessionKey: session.config.session_key }, "Could not resolve WhatsApp LID");
+          return null;
+        } finally {
+          session.lidLookups.delete(normalizedLid);
+        }
+      })();
+      session.lidLookups.set(normalizedLid, lookup);
+    }
+    const phone = await lookup;
+    if (phone) return phone;
+  }
+  return null;
+}
+
 function rememberMessageAddresses(session, message) {
   const key = message.key || {};
   rememberLidPhone(session, key.senderLid, key.senderPn);
@@ -145,13 +188,13 @@ async function postMessageEvent(session, socket, message) {
   const senderJid = fromMe ? ownJid : chatType === "group" ? participantJid || remoteJid : remoteJid;
   const recipientJid = chatType === "group" ? remoteJid : fromMe ? remoteJid : ownJid;
   const senderPhone = fromMe
-    ? phoneForParty(session, senderJid, [socket.user?.jid])
-    : phoneForParty(session, senderJid, [key.senderLid, key.senderPn, key.participantLid, key.participantPn]);
+    ? await phoneForPartyWithLookup(session, socket, senderJid, [socket.user?.jid])
+    : await phoneForPartyWithLookup(session, socket, senderJid, [key.senderLid, key.senderPn, key.participantLid, key.participantPn]);
   const recipientPhone = chatType === "group"
     ? null
     : fromMe
-      ? phoneForParty(session, recipientJid, [key.participantLid, key.participantPn, ...(key.senderLid === recipientJid ? [key.senderLid, key.senderPn] : [])])
-      : phoneForParty(session, recipientJid, [socket.user?.lid, socket.user?.jid]);
+      ? await phoneForPartyWithLookup(session, socket, recipientJid, [key.participantLid, key.participantPn, ...(key.senderLid === recipientJid ? [key.senderLid, key.senderPn] : [])])
+      : await phoneForPartyWithLookup(session, socket, recipientJid, [socket.user?.lid, socket.user?.jid]);
   const contactPhone = chatType === "group" ? null : fromMe ? recipientPhone : senderPhone;
   const timestamp = Number(message.messageTimestamp || Math.floor(Date.now() / 1000));
 
@@ -311,6 +354,7 @@ async function startSession(config) {
     closing: false,
     groupNames: new Map(),
     lidToPhone: new Map(),
+    lidLookups: new Map(),
   };
   sessions.set(config.session_key, session);
   await writeSessionConfig(session);

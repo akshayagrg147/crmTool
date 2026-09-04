@@ -150,6 +150,71 @@ async def test_group_message_keeps_chat_and_participant_identity(client, db_sess
 
 
 @pytest.mark.asyncio
+async def test_outbound_lid_message_is_resolved_from_same_chat(client, db_session):
+    org, admin = await create_org_with_admin(db_session, admin_phone="9300000061")
+    telecaller = await _member(db_session, org.id, "LID Telecaller", "9300000062", UserRole.telecaller)
+    headers = _headers(admin)
+    created = await client.post(
+        "/api/whatsapp/instances",
+        headers=headers,
+        json={"assigned_user_id": str(telecaller.id), "label": "LID test"},
+    )
+    instance = created.json()
+    webhook_url = f"/api/whatsapp/webhook/{instance['id']}"
+    webhook_headers = {"X-WhatsApp-Token": instance["webhook_token"]}
+    chat_id = "63329594810436@lid"
+    now = datetime.now(timezone.utc).isoformat()
+
+    outbound = await client.post(
+        webhook_url,
+        headers=webhook_headers,
+        json={
+            "event": "message",
+            "message": {
+                "external_message_id": "wamid-lid-outbound",
+                "chat_id": chat_id,
+                "chat_type": "direct",
+                "contact_phone": "Unknown contact",
+                "sender_phone": "+919300000062",
+                "sender_name": "You",
+                "direction": "outbound",
+                "body": "Hello",
+                "sent_at": now,
+            },
+        },
+    )
+    assert outbound.status_code == 202
+
+    inbound = await client.post(
+        webhook_url,
+        headers=webhook_headers,
+        json={
+            "event": "message",
+            "message": {
+                "external_message_id": "wamid-lid-inbound",
+                "chat_id": chat_id,
+                "chat_type": "direct",
+                "contact_phone": "+919311116666",
+                "sender_phone": "+919311116666",
+                "sender_name": "Ravi",
+                "recipient_phone": "+919300000062",
+                "direction": "inbound",
+                "body": "Hi back",
+                "sent_at": now,
+            },
+        },
+    )
+    assert inbound.status_code == 202
+
+    messages = await client.get(f"/api/whatsapp/instances/{instance['id']}/messages", headers=headers)
+    assert messages.status_code == 200
+    by_body = {item["body"]: item for item in messages.json()["items"]}
+    assert by_body["Hello"]["contact_phone"] == "919311116666"
+    assert by_body["Hello"]["recipient_phone"] == "919311116666"
+    assert by_body["Hi back"]["contact_phone"] == "919311116666"
+
+
+@pytest.mark.asyncio
 async def test_each_employee_number_has_an_isolated_instance_and_message_stream(client, db_session):
     org, admin = await create_org_with_admin(db_session, admin_phone="9300000041")
     first_employee = await _member(db_session, org.id, "First Telecaller", "9300000042", UserRole.telecaller)
