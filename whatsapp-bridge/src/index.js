@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import makeWASocket, {
   DisconnectReason,
+  fetchLatestWaWebVersion,
   makeCacheableSignalKeyStore,
   useMultiFileAuthState,
 } from "@whiskeysockets/baileys";
@@ -14,6 +15,26 @@ const DATA_DIR = process.env.DATA_DIR || "/data";
 const BRIDGE_API_TOKEN = process.env.BRIDGE_API_TOKEN || "";
 const logger = pino({ level: process.env.LOG_LEVEL || "info" });
 const sessions = new Map();
+let waWebVersionPromise;
+
+async function getWaWebVersion() {
+  if (!waWebVersionPromise) {
+    waWebVersionPromise = fetchLatestWaWebVersion({ timeout: 10000 })
+      .then((result) => {
+        if (!result.isLatest) {
+          logger.warn({ err: result.error, version: result.version }, "Could not fetch the latest WhatsApp Web version; using the bundled version");
+        } else {
+          logger.info({ version: result.version }, "Using the latest WhatsApp Web version");
+        }
+        return result.version;
+      })
+      .catch((error) => {
+        logger.warn({ err: error }, "Could not fetch the latest WhatsApp Web version; using the bundled version");
+        return undefined;
+      });
+  }
+  return waWebVersionPromise;
+}
 
 function safeSessionName(sessionKey) {
   return sessionKey.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 100);
@@ -90,11 +111,13 @@ function scheduleReconnect(session) {
 async function openSocket(session) {
   if (session.closing) return;
   const { state, saveCreds } = await useMultiFileAuthState(sessionDir(session.config.session_key));
+  const version = await getWaWebVersion();
   const socket = makeWASocket({
     auth: {
       creds: state.creds,
       keys: makeCacheableSignalKeyStore(state.keys, logger),
     },
+    ...(version ? { version } : {}),
     browser: ["TalkoCRM", "Chrome", "1.0"],
     markOnlineOnConnect: false,
     syncFullHistory: false,
