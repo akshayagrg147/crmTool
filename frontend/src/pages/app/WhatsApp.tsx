@@ -1,17 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  CheckCheck,
   Check,
   CircleAlert,
   Copy,
   Eye,
+  Info,
   MessageCircleMore,
+  MoreHorizontal,
+  Paperclip,
   Plus,
   QrCode,
   RefreshCw,
   RotateCw,
+  Search,
   ShieldCheck,
+  Smile,
   Trash2,
+  UserRound,
   Wifi,
   WifiOff,
 } from "lucide-react";
@@ -89,6 +96,176 @@ function MessageRow({ message, onRead }: { message: WhatsAppMessageOut; onRead: 
   );
 }
 
+function initials(value: string) {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "?";
+}
+
+function messageTime(value: string) {
+  return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(value));
+}
+
+function messageDay(value: string) {
+  const date = new Date(value);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+  if (date.toDateString() === today.toDateString()) return "Today";
+  if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric" }).format(date);
+}
+
+function ChatMonitor({
+  instances,
+  selectedInstanceId,
+  onInstanceChange,
+  messages,
+  isLoading,
+  onMarkRead,
+}: {
+  instances: WhatsAppInstanceOut[];
+  selectedInstanceId: string | null;
+  onInstanceChange: (id: string) => void;
+  messages: WhatsAppMessageOut[];
+  isLoading: boolean;
+  onMarkRead: (message: WhatsAppMessageOut) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [activePhone, setActivePhone] = useState<string | null>(null);
+  const selectedInstance = instances.find((instance) => instance.id === selectedInstanceId) ?? null;
+
+  const conversations = useMemo(() => {
+    const grouped = new Map<string, WhatsAppMessageOut[]>();
+    messages.forEach((message) => {
+      const key = message.contact_phone || message.contact_name || "Unknown contact";
+      grouped.set(key, [...(grouped.get(key) ?? []), message]);
+    });
+    return [...grouped.entries()]
+      .map(([phone, items]) => {
+        const sorted = [...items].sort((a, b) => new Date(b.sent_at).getTime() - new Date(a.sent_at).getTime());
+        return {
+          phone,
+          name: sorted.find((message) => message.contact_name)?.contact_name || phone,
+          messages: sorted,
+          latest: sorted[0],
+          unread: sorted.filter((message) => !message.is_read && message.direction === "inbound").length,
+        };
+      })
+      .sort((a, b) => new Date(b.latest.sent_at).getTime() - new Date(a.latest.sent_at).getTime());
+  }, [messages]);
+
+  useEffect(() => {
+    if (!conversations.some((conversation) => conversation.phone === activePhone)) {
+      setActivePhone(conversations[0]?.phone ?? null);
+    }
+  }, [activePhone, conversations, selectedInstanceId]);
+
+  const filteredConversations = conversations.filter((conversation) => {
+    const query = search.trim().toLowerCase();
+    return !query || `${conversation.name} ${conversation.phone} ${conversation.latest.body}`.toLowerCase().includes(query);
+  });
+  const activeConversation = conversations.find((conversation) => conversation.phone === activePhone) ?? null;
+  const activeMessages = activeConversation ? [...activeConversation.messages].sort((a, b) => new Date(a.sent_at).getTime() - new Date(b.sent_at).getTime()) : [];
+
+  return (
+    <section className="card overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-100 bg-white px-4 py-3 sm:px-5">
+        <div className="flex items-center gap-4">
+          <button type="button" className="inline-flex items-center gap-2 border-b-2 border-primary px-1 pb-2 pt-1 text-sm font-semibold text-primary">
+            <Eye size={15} /> Monitor team chat
+          </button>
+          <span className="inline-flex items-center gap-2 px-1 pb-2 pt-1 text-sm font-medium text-ink-300" title="Admins can monitor chats but cannot send messages">
+            <MessageCircleMore size={15} /> My chat
+          </span>
+        </div>
+        <span className="badge border-primary/15 bg-primary/[0.04] text-primary"><ShieldCheck size={13} /> Admin-only view</span>
+      </div>
+
+      <div className="grid min-h-[620px] lg:grid-cols-[300px_minmax(0,1fr)]">
+        <aside className="border-b border-ink-100 bg-[#FBFAF7] lg:border-b-0 lg:border-r">
+          <div className="border-b border-ink-100 p-4">
+            <label className="section-label" htmlFor="whatsapp-monitor-instance">Monitoring chat for</label>
+            <select id="whatsapp-monitor-instance" className="input mt-2 text-xs" value={selectedInstanceId ?? ""} onChange={(event) => onInstanceChange(event.target.value)} disabled={!instances.length}>
+              {!instances.length && <option value="">No instances available</option>}
+              {instances.map((instance) => <option key={instance.id} value={instance.id}>{instance.assigned_user_name} · {instance.label}{instance.phone_number ? ` · ${instance.phone_number}` : ""}</option>)}
+            </select>
+            <div className="relative mt-3">
+              <Search size={15} className="pointer-events-none absolute left-3 top-3 text-ink-300" />
+              <input className="input pl-9 text-xs" placeholder="Search chats" value={search} onChange={(event) => setSearch(event.target.value)} />
+            </div>
+          </div>
+          <div className="border-b border-ink-100 px-4 py-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-500">Chats</p>
+              <span className="text-[11px] text-ink-400">{conversations.length} total</span>
+            </div>
+          </div>
+          <div className="max-h-[420px] overflow-y-auto lg:max-h-[510px]">
+            {isLoading ? (
+              <div className="space-y-3 p-4"><div className="skeleton h-16" /><div className="skeleton h-16" /><div className="skeleton h-16" /></div>
+            ) : !filteredConversations.length ? (
+              <div className="px-5 py-12 text-center"><MessageCircleMore size={24} className="mx-auto text-ink-300" /><p className="mt-3 text-sm font-medium text-ink-700">No chats yet</p><p className="mt-1 text-xs leading-5 text-ink-400">Incoming and outgoing messages will appear here once this number is active.</p></div>
+            ) : (
+              <div className="divide-y divide-ink-100">
+                {filteredConversations.map((conversation) => (
+                  <button key={conversation.phone} type="button" aria-pressed={conversation.phone === activePhone} onClick={() => setActivePhone(conversation.phone)} className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors ${conversation.phone === activePhone ? "bg-primary/[0.07]" : "hover:bg-primary/[0.035]"}`}>
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-bold text-primary">{initials(conversation.name)}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center justify-between gap-2"><span className="truncate text-sm font-semibold text-ink-900">{conversation.name}</span><span className="shrink-0 text-[10px] text-ink-400">{timeAgo(conversation.latest.sent_at)}</span></span>
+                      <span className="mt-0.5 block truncate text-xs text-ink-500">{conversation.latest.body}</span>
+                      <span className="mt-1 flex items-center justify-between gap-2"><span className="truncate text-[10px] text-ink-400">{conversation.phone}</span>{conversation.unread > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold text-white">{conversation.unread}</span>}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </aside>
+
+        <div className="flex min-w-0 flex-col bg-[#F3F5F3]">
+          {activeConversation && selectedInstance ? (
+            <>
+              <header className="flex items-center justify-between gap-3 border-b border-ink-100 bg-white px-4 py-3 sm:px-6">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-bold text-primary">{initials(activeConversation.name)}</span>
+                  <div className="min-w-0"><p className="truncate font-semibold text-ink-900">{activeConversation.name}</p><p className="mt-0.5 truncate text-xs text-ink-500">{activeConversation.phone} · {selectedInstance.assigned_user_name} · <StatusPill status={selectedInstance.status} /></p></div>
+                </div>
+                <div className="flex shrink-0 items-center gap-1 text-ink-400"><button type="button" className="icon-button" title="Read-only monitoring"><Info size={17} /></button><button type="button" className="icon-button" title="More options"><MoreHorizontal size={18} /></button></div>
+              </header>
+              <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-8">
+                <div className="mx-auto flex max-w-3xl flex-col gap-2">
+                  {activeMessages.map((message, index) => {
+                    const showDay = index === 0 || messageDay(activeMessages[index - 1].sent_at) !== messageDay(message.sent_at);
+                    const inbound = message.direction === "inbound";
+                    return (
+                      <div key={message.id}>
+                        {showDay && <div className="my-3 flex justify-center"><span className="rounded-full border border-ink-100 bg-white px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-400 shadow-sm">{messageDay(message.sent_at)}</span></div>}
+                        <div className={`flex ${inbound ? "justify-start" : "justify-end"}`}>
+                          <div className={`max-w-[88%] rounded-2xl px-3.5 py-2.5 shadow-sm sm:max-w-[72%] ${inbound ? "rounded-tl-md border border-ink-100 bg-white text-ink-800" : "rounded-tr-md border border-[#C7E7C9] bg-[#DDF4DF] text-ink-800"}`}>
+                            <p className="whitespace-pre-wrap break-words text-sm leading-6">{message.body}</p>
+                            <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-ink-400"><span>{messageTime(message.sent_at)}</span>{!inbound && <CheckCheck size={13} className="text-primary" />}{inbound && !message.is_read && <button type="button" onClick={() => onMarkRead(message)} className="ml-1 font-semibold text-primary hover:underline">Mark read</button>}</div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              <footer className="border-t border-ink-100 bg-white px-4 py-3 sm:px-6"><div className="flex items-center gap-2 rounded-xl border border-ink-100 bg-[#F8F7F3] px-3 py-2"><Paperclip size={17} className="shrink-0 text-ink-300" /><input className="w-full bg-transparent text-sm text-ink-500 outline-none placeholder:text-ink-300" disabled placeholder="Read-only monitoring — sending is disabled" /><Smile size={17} className="shrink-0 text-ink-300" /></div><p className="mt-2 flex items-center justify-center gap-1.5 text-[11px] text-ink-400"><ShieldCheck size={13} /> Chats update when the employee’s WhatsApp instance is active.</p></footer>
+            </>
+          ) : (
+            <div className="flex flex-1 flex-col items-center justify-center px-6 py-16 text-center"><span className="flex h-14 w-14 items-center justify-center rounded-full bg-primary-soft text-primary"><UserRound size={24} /></span><h3 className="mt-4 text-lg font-semibold text-ink-900">Select a chat to monitor</h3><p className="mt-1 max-w-sm text-sm leading-6 text-ink-500">Choose an employee’s WhatsApp instance and conversation from the left. This admin view never sends messages.</p></div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function WhatsAppPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -97,6 +274,7 @@ export function WhatsAppPage() {
   const [removeTarget, setRemoveTarget] = useState<WhatsAppInstanceOut | null>(null);
   const [tokenNotice, setTokenNotice] = useState<{ instance: WhatsAppInstanceOut; token: string } | null>(null);
   const [qrInstanceId, setQrInstanceId] = useState<string | null>(null);
+  const [monitorInstanceSelection, setMonitorInstanceSelection] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [form, setForm] = useState({ assigned_user_id: "", label: "", phone_number: "" });
 
@@ -111,6 +289,16 @@ export function WhatsAppPage() {
     queryKey: ["whatsapp-messages", selected?.id],
     queryFn: () => whatsappApi.messages(selected!.id),
     enabled: !!selected,
+  });
+  const availableInstances = instancesQuery.data ?? [];
+  const monitorInstanceId = monitorInstanceSelection && availableInstances.some((instance) => instance.id === monitorInstanceSelection)
+    ? monitorInstanceSelection
+    : availableInstances[0]?.id ?? null;
+  const monitorMessagesQuery = useQuery({
+    queryKey: ["whatsapp-monitor-messages", monitorInstanceId],
+    queryFn: () => whatsappApi.messages(monitorInstanceId!),
+    enabled: !!monitorInstanceId,
+    refetchInterval: 5000,
   });
 
   const employees = useMemo(
@@ -128,6 +316,7 @@ export function WhatsAppPage() {
     void queryClient.invalidateQueries({ queryKey: ["whatsapp-instances"] });
     void queryClient.invalidateQueries({ queryKey: ["whatsapp-overview"] });
     if (selected) void queryClient.invalidateQueries({ queryKey: ["whatsapp-messages", selected.id] });
+    if (monitorInstanceId) void queryClient.invalidateQueries({ queryKey: ["whatsapp-monitor-messages", monitorInstanceId] });
   };
 
   const createMutation = useMutation({
@@ -216,6 +405,15 @@ export function WhatsAppPage() {
           <p className="mt-0.5">Employees cannot see this page or another employee’s messages. A WhatsApp bridge must post status and message events to each instance webhook.</p>
         </div>
       </div>
+
+      <ChatMonitor
+        instances={instances}
+        selectedInstanceId={monitorInstanceId}
+        onInstanceChange={setMonitorInstanceSelection}
+        messages={monitorMessagesQuery.data?.items ?? []}
+        isLoading={monitorMessagesQuery.isLoading}
+        onMarkRead={(message) => readMutation.mutate({ instanceId: message.instance_id, messageId: message.id })}
+      />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard label="Instances" value={overview?.total_instances ?? instances.length} />
