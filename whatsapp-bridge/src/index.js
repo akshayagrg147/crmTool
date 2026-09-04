@@ -45,9 +45,58 @@ function sessionDir(sessionKey) {
 }
 
 function phoneFromJid(jid) {
-  if (!jid) return null;
-  const value = jid.split("@")[0].split(":")[0];
-  return value || null;
+  if (!jid || typeof jid !== "string") return null;
+  const [user, server] = jid.split("@", 2);
+  if (!user || !server || !["s.whatsapp.net", "c.us"].includes(server)) return null;
+  const value = user.split(":")[0].replace(/^\+/, "");
+  return /^\d{5,20}$/.test(value) ? value : null;
+}
+
+function phoneFromValue(value) {
+  if (!value || typeof value !== "string") return null;
+  if (value.includes("@")) return phoneFromJid(value);
+  const normalized = value.split(":")[0].replace(/^\+/, "");
+  return /^\d{5,20}$/.test(normalized) ? normalized : null;
+}
+
+function rememberLidPhone(session, lid, phone) {
+  const phoneNumber = phoneFromValue(phone);
+  if (!lid || !phoneNumber) return;
+  const normalizedLid = lid.includes("@") ? lid : `${lid}@lid`;
+  session.lidToPhone ||= new Map();
+  session.lidToPhone.set(normalizedLid, phoneNumber);
+  session.lidToPhone.set(normalizedLid.split("@", 1)[0], phoneNumber);
+}
+
+function rememberContact(session, contact) {
+  if (!contact) return;
+  rememberLidPhone(session, contact.lid, contact.jid || contact.id);
+  if (contact.id?.endsWith("@lid")) rememberLidPhone(session, contact.id, contact.jid);
+}
+
+function rememberContacts(session, contacts) {
+  for (const contact of contacts || []) rememberContact(session, contact);
+}
+
+function phoneForJid(session, jid) {
+  return phoneFromJid(jid) || session.lidToPhone?.get(jid) || session.lidToPhone?.get(jid?.split("@", 1)[0]) || null;
+}
+
+function phoneForParty(session, jid, alternates = []) {
+  for (const value of [jid, ...alternates]) {
+    const phone = phoneForJid(session, value) || phoneFromValue(value);
+    if (phone) return phone;
+  }
+  return null;
+}
+
+function rememberMessageAddresses(session, message) {
+  const key = message.key || {};
+  rememberLidPhone(session, key.senderLid, key.senderPn);
+  rememberLidPhone(session, key.participantLid, key.participantPn);
+  if (key.remoteJid === key.senderLid) rememberLidPhone(session, key.remoteJid, key.senderPn);
+  if (key.remoteJid === key.participantLid) rememberLidPhone(session, key.remoteJid, key.participantPn);
+  if (key.participant === key.participantLid) rememberLidPhone(session, key.participant, key.participantPn);
 }
 
 function messageText(message) {
@@ -82,27 +131,38 @@ async function groupSubject(session, socket, remoteJid) {
 }
 
 async function postMessageEvent(session, socket, message) {
-  const remoteJid = message.key?.remoteJid;
+  const key = message.key || {};
+  const remoteJid = key.remoteJid;
   const body = messageText(message.message);
   if (!remoteJid || remoteJid.endsWith("@status") || !message.message || !body) return;
 
-  const fromMe = Boolean(message.key.fromMe);
+  rememberMessageAddresses(session, message);
+  const fromMe = Boolean(key.fromMe);
   const chatType = remoteJid.endsWith("@g.us") ? "group" : "direct";
   const groupName = await groupSubject(session, socket, remoteJid);
   const ownJid = socket.user?.id || null;
-  const participantJid = message.key?.participant || null;
+  const participantJid = key.participant || null;
   const senderJid = fromMe ? ownJid : chatType === "group" ? participantJid || remoteJid : remoteJid;
   const recipientJid = chatType === "group" ? remoteJid : fromMe ? remoteJid : ownJid;
-  const senderPhone = phoneFromJid(senderJid);
-  const recipientPhone = phoneFromJid(recipientJid);
+  const senderPhone = fromMe
+    ? phoneForParty(session, senderJid, [socket.user?.jid])
+    : phoneForParty(session, senderJid, [key.senderLid, key.senderPn, key.participantLid, key.participantPn]);
+  const recipientPhone = chatType === "group"
+    ? null
+    : fromMe
+      ? phoneForParty(session, recipientJid, [key.participantLid, key.participantPn, ...(key.senderLid === recipientJid ? [key.senderLid, key.senderPn] : [])])
+      : phoneForParty(session, recipientJid, [socket.user?.lid, socket.user?.jid]);
+  const contactPhone = chatType === "group" ? null : fromMe ? recipientPhone : senderPhone;
   const timestamp = Number(message.messageTimestamp || Math.floor(Date.now() / 1000));
 
   await postWebhook(session, {
     event: "message",
-    phone_number: phoneFromJid(ownJid),
+    phone_number: phoneForParty(session, ownJid, [socket.user?.jid]),
     message: {
-      external_message_id: message.key.id || null,
-      contact_phone: phoneFromJid(remoteJid) || remoteJid,
+      external_message_id: key.id || null,
+      // Do not persist a group/LID identifier as if it were a phone number.
+      // The backend keeps the real conversation identifier in chat_id.
+      contact_phone: contactPhone || (chatType === "group" ? "Group chat" : "Unknown contact"),
       contact_name: chatType === "group" ? groupName : fromMe ? null : message.pushName || null,
       chat_id: remoteJid,
       chat_type: chatType,
@@ -118,6 +178,10 @@ async function postMessageEvent(session, socket, message) {
       metadata: {
         remote_jid: remoteJid,
         participant_jid: participantJid,
+        sender_lid: key.senderLid || null,
+        sender_pn: key.senderPn || null,
+        participant_lid: key.participantLid || null,
+        participant_pn: key.participantPn || null,
         sender_jid: senderJid,
         recipient_jid: recipientJid,
         from_me: fromMe,
@@ -153,7 +217,7 @@ async function postWebhook(session, event) {
 }
 
 async function postStatus(session, status, extra = {}) {
-  const phoneNumber = phoneFromJid(session.socket?.user?.id);
+  const phoneNumber = phoneForParty(session, session.socket?.user?.id, [session.socket?.user?.jid]);
   await postWebhook(session, {
     event: "status",
     status,
@@ -186,7 +250,15 @@ async function openSocket(session) {
     logger: logger.child({ sessionKey: session.config.session_key }),
   });
   session.socket = socket;
-  socket.ev.on("creds.update", saveCreds);
+  rememberContact(session, socket.user);
+  socket.ev.on("creds.update", (update) => {
+    rememberContact(session, update.me);
+    void saveCreds(update);
+  });
+  socket.ev.on("chats.phoneNumberShare", ({ lid, jid }) => rememberLidPhone(session, lid, jid));
+  socket.ev.on("contacts.upsert", (contacts) => rememberContacts(session, contacts));
+  socket.ev.on("contacts.update", (contacts) => rememberContacts(session, contacts));
+  socket.ev.on("messaging-history.set", ({ contacts }) => rememberContacts(session, contacts));
   socket.ev.on("connection.update", ({ connection, lastDisconnect, qr }) => {
     if (qr) {
       void QRCode.toDataURL(qr, { width: 320, margin: 1 })
@@ -231,7 +303,15 @@ async function startSession(config) {
     if (!existing.socket) await openSocket(existing);
     return existing;
   }
-  const session = { config, socket: null, qr: null, reconnectTimer: null, closing: false, groupNames: new Map() };
+  const session = {
+    config,
+    socket: null,
+    qr: null,
+    reconnectTimer: null,
+    closing: false,
+    groupNames: new Map(),
+    lidToPhone: new Map(),
+  };
   sessions.set(config.session_key, session);
   await writeSessionConfig(session);
   await openSocket(session);

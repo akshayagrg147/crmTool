@@ -30,6 +30,20 @@ router = APIRouter(prefix="/whatsapp", tags=["whatsapp"])
 webhook_router = APIRouter(prefix="/whatsapp", tags=["whatsapp"])
 
 
+def _phone_from_value(value: str | None) -> str | None:
+    """Return a phone-number JID as digits, never a group/LID identifier."""
+    if not value:
+        return None
+    text = str(value).strip()
+    if "@" in text:
+        user, server = text.split("@", 1)
+        if server not in {"s.whatsapp.net", "c.us"}:
+            return None
+        text = user
+    text = text.split(":", 1)[0].lstrip("+")
+    return text if text.isdigit() and 5 <= len(text) <= 20 else None
+
+
 def _webhook_url(instance_id: uuid.UUID) -> str:
     return f"{settings.public_base_url.rstrip('/')}/api/whatsapp/webhook/{instance_id}"
 
@@ -486,7 +500,12 @@ async def receive_webhook(
     chat_type = payload.chat_type
     if chat_type == WhatsAppChatType.direct and (chat_id.endswith("@g.us") or metadata.get("chat_type") == WhatsAppChatType.group.value):
         chat_type = WhatsAppChatType.group
-    contact_phone = (payload.contact_phone or (chat_id.split("@", 1)[0] if chat_type == WhatsAppChatType.group else payload.sender_phone or payload.recipient_phone or "unknown")).strip()
+    if chat_type == WhatsAppChatType.group:
+        contact_phone = "Group chat"
+    else:
+        contact_phone = _phone_from_value(payload.contact_phone)
+        if not contact_phone:
+            contact_phone = _phone_from_value(payload.sender_phone if payload.direction == WhatsAppMessageDirection.inbound else payload.recipient_phone) or "Unknown contact"
     chat_name = payload.chat_name.strip() if payload.chat_name else None
     message = WhatsAppMessage(
         organization_id=instance.organization_id,
@@ -498,9 +517,9 @@ async def receive_webhook(
         chat_id=chat_id,
         chat_type=chat_type.value,
         chat_name=chat_name,
-        sender_phone=payload.sender_phone.strip() if payload.sender_phone else None,
+        sender_phone=_phone_from_value(payload.sender_phone),
         sender_name=payload.sender_name.strip() if payload.sender_name else None,
-        recipient_phone=payload.recipient_phone.strip() if payload.recipient_phone else None,
+        recipient_phone=_phone_from_value(payload.recipient_phone),
         recipient_name=payload.recipient_name.strip() if payload.recipient_name else None,
         direction=payload.direction.value,
         message_type=payload.message_type,

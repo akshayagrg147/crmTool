@@ -71,14 +71,23 @@ function partyLabel(name: string | null, phone: string | null, fallback: string)
   return name || phone || fallback;
 }
 
+function visiblePhone(message: WhatsAppMessageOut, phone: string | null) {
+  if (!phone || message.chat_type === "group") return null;
+  const chatId = message.chat_id || "";
+  const chatUser = chatId.endsWith("@lid") ? chatId.split("@", 1)[0]?.split(":", 1)[0] : null;
+  // Older bridge events stored the anonymous LID as contact_phone. Never show
+  // that internal identifier as though it were a customer's phone number.
+  return chatUser && phone === chatUser ? null : phone;
+}
+
 function messageRoute(message: WhatsAppMessageOut, instance?: WhatsAppInstanceOut | null) {
   const employee = instance?.assigned_user_name || "Employee WhatsApp";
-  const contact = message.contact_name || message.contact_phone || "Contact";
+  const contact = message.contact_name || visiblePhone(message, message.contact_phone) || "Contact";
   const senderName = message.sender_name === "You" ? employee : message.sender_name;
-  const sender = partyLabel(senderName, message.sender_phone, message.direction === "outbound" ? employee : contact);
+  const sender = partyLabel(senderName, visiblePhone(message, message.sender_phone), message.direction === "outbound" ? employee : contact);
   const recipient = message.chat_type === "group"
-    ? partyLabel(message.recipient_name || message.chat_name, message.recipient_phone || message.chat_id, "Group chat")
-    : partyLabel(message.recipient_name, message.recipient_phone, message.direction === "inbound" ? employee : contact);
+    ? partyLabel(message.recipient_name || message.chat_name, null, "Group chat")
+    : partyLabel(message.recipient_name, visiblePhone(message, message.recipient_phone), message.direction === "inbound" ? employee : contact);
   return { sender, recipient };
 }
 
@@ -90,7 +99,7 @@ function MessageRow({ message, instance, onRead }: { message: WhatsAppMessageOut
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="font-medium text-ink-900">{message.chat_name || message.contact_name || message.contact_phone}</p>
+            <p className="font-medium text-ink-900">{message.chat_name || message.contact_name || visiblePhone(message, message.contact_phone) || "Contact"}</p>
             <span className={`badge ${inbound ? "bg-secondary/10 text-secondary" : "bg-primary/10 text-primary"}`}>
               {inbound ? "Incoming" : "Outgoing"}
             </span>
@@ -167,7 +176,9 @@ function ChatMonitor({
       .map(([chatId, items]) => {
         const sorted = [...items].sort((a, b) => new Date(b.sent_at).getTime() - new Date(a.sent_at).getTime());
         const chatType = sorted.some((message) => message.chat_type === "group") ? "group" : "direct";
-        const phone = sorted.find((message) => message.contact_phone)?.contact_phone || chatId;
+        const phone = chatType === "group"
+          ? "Group chat"
+          : sorted.map((message) => visiblePhone(message, message.contact_phone)).find(Boolean) || "Phone unavailable";
         return {
           chatId,
           chatType,
@@ -240,7 +251,7 @@ function ChatMonitor({
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center justify-between gap-2"><span className="flex min-w-0 items-center gap-1.5"><span className="truncate text-sm font-semibold text-ink-900">{conversation.name}</span>{conversation.chatType === "group" && <span className="badge shrink-0 bg-accent/10 px-1.5 py-0.5 text-[9px] text-accent-dark">Group</span>}</span><span className="shrink-0 text-[10px] text-ink-400">{timeAgo(conversation.latest.sent_at)}</span></span>
                       <span className="mt-0.5 block truncate text-xs text-ink-500">{conversation.latest.body}</span>
-                      <span className="mt-1 flex items-center justify-between gap-2"><span className="truncate text-[10px] text-ink-400">{conversation.chatType === "group" ? `Group chat · ${conversation.phone}` : conversation.phone}</span>{conversation.unread > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold text-white">{conversation.unread}</span>}</span>
+                      <span className="mt-1 flex items-center justify-between gap-2"><span className="truncate text-[10px] text-ink-400">{conversation.chatType === "group" ? "Group chat" : conversation.phone}</span>{conversation.unread > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold text-white">{conversation.unread}</span>}</span>
                     </span>
                   </button>
                 ))}
@@ -255,7 +266,7 @@ function ChatMonitor({
               <header className="flex items-center justify-between gap-3 border-b border-ink-100 bg-white px-4 py-3 sm:px-6">
                 <div className="flex min-w-0 items-center gap-3">
                   <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-bold text-primary">{activeConversation.chatType === "group" ? <UsersRound size={17} /> : initials(activeConversation.name)}</span>
-                  <div className="min-w-0"><div className="flex items-center gap-2"><p className="truncate font-semibold text-ink-900">{activeConversation.name}</p>{activeConversation.chatType === "group" && <span className="badge gap-1 bg-accent/10 text-accent-dark"><UsersRound size={12} /> Group chat</span>}</div><p className="mt-0.5 truncate text-xs text-ink-500">{activeConversation.chatType === "group" ? `Group chat · ${activeConversation.phone}` : activeConversation.phone} · monitored for {selectedInstance.assigned_user_name} · <StatusPill status={selectedInstance.status} /></p></div>
+                  <div className="min-w-0"><div className="flex items-center gap-2"><p className="truncate font-semibold text-ink-900">{activeConversation.name}</p>{activeConversation.chatType === "group" && <span className="badge gap-1 bg-accent/10 text-accent-dark"><UsersRound size={12} /> Group chat</span>}</div><p className="mt-0.5 truncate text-xs text-ink-500">{activeConversation.chatType === "group" ? "Group chat" : activeConversation.phone} · monitored for {selectedInstance.assigned_user_name} · <StatusPill status={selectedInstance.status} /></p></div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1 text-ink-400"><button type="button" className="icon-button" title="Read-only monitoring"><Info size={17} /></button><button type="button" className="icon-button" title="More options"><MoreHorizontal size={18} /></button></div>
               </header>
