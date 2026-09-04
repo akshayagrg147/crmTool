@@ -12,7 +12,7 @@ from app.core.database import get_db
 from app.core.deps import CurrentUser, require_admin
 from app.core.security import hash_password, verify_password
 from app.models.lead import Lead
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.whatsapp import WhatsAppChatType, WhatsAppInstance, WhatsAppInstanceStatus, WhatsAppMessage, WhatsAppMessageDirection
 from app.schemas.whatsapp import (
     WhatsAppEmployeeSummary,
@@ -60,7 +60,7 @@ async def _get_assigned_user(
         )
     )
     user = result.scalar_one_or_none()
-    if user is None:
+    if user is None or user.role == UserRole.super_admin:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Choose an active employee from this organization")
     return user
 

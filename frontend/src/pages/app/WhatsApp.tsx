@@ -407,6 +407,11 @@ export function WhatsAppPage() {
     });
   }
 
+  function openCreateForEmployee(employeeId?: string) {
+    setForm((current) => ({ ...current, assigned_user_id: employeeId ?? employees[0]?.id ?? "" }));
+    setShowCreate(true);
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -417,7 +422,7 @@ export function WhatsAppPage() {
             Manage separate WhatsApp Web sessions for each employee and review their conversation activity from one private admin view.
           </p>
         </div>
-        <button className="btn-primary text-sm" onClick={() => setShowCreate(true)} disabled={!employees.length}>
+        <button className="btn-primary text-sm" onClick={() => openCreateForEmployee()} disabled={!employees.length}>
           <Plus size={16} /> Add instance
         </button>
       </div>
@@ -426,7 +431,7 @@ export function WhatsAppPage() {
         <ShieldCheck size={18} className="mt-0.5 shrink-0 text-primary" />
         <div className="text-sm text-ink-700">
           <p className="font-semibold text-ink-900">Admin-only tracking</p>
-          <p className="mt-0.5">Employees cannot see this page or another employee’s messages. A WhatsApp bridge must post status and message events to each instance webhook.</p>
+          <p className="mt-0.5">Create one instance per telecaller/number. Every instance has its own QR, persistent login, and isolated chat stream; connecting one number never replaces another.</p>
         </div>
       </div>
 
@@ -457,7 +462,7 @@ export function WhatsAppPage() {
               <div key={employee.user_id} className="rounded-xl border border-ink-100 bg-[#F8F7F3] p-3">
                 <div className="flex items-center justify-between gap-2">
                   <p className="truncate font-medium text-ink-900">{employee.user_name}</p>
-                  <span className="badge bg-primary/10 text-primary">{employee.instances}</span>
+                  <span className="flex items-center gap-1.5"><span className="badge bg-primary/10 text-primary">{employee.instances} {employee.instances === 1 ? "number" : "numbers"}</span><button type="button" className="icon-button h-7 w-7" title={`Add another WhatsApp number for ${employee.user_name}`} onClick={() => openCreateForEmployee(employee.user_id)}><Plus size={14} /></button></span>
                 </div>
                 <p className="mt-1 text-xs text-ink-500">{employee.connected_instances} connected · {employee.messages} messages</p>
                 {employee.unread_messages > 0 && <p className="mt-2 text-xs font-semibold text-warning">{employee.unread_messages} unread incoming</p>}
@@ -476,7 +481,7 @@ export function WhatsAppPage() {
           <button className="btn-ghost text-xs" onClick={invalidate}><RefreshCw size={14} /> Refresh</button>
         </div>
         {!instances.length ? (
-          <EmptyState icon={MessageCircleMore} title="No WhatsApp instances yet" message="Create one session for each employee’s WhatsApp number to start tracking activity." action={<button className="btn-primary text-sm" onClick={() => setShowCreate(true)}><Plus size={15} /> Add first instance</button>} />
+          <EmptyState icon={MessageCircleMore} title="No WhatsApp instances yet" message="Create one session for each employee’s WhatsApp number to start tracking activity." action={<button className="btn-primary text-sm" onClick={() => openCreateForEmployee()}><Plus size={15} /> Add first instance</button>} />
         ) : (
           <>
             <div className="hidden overflow-x-auto md:block">
@@ -507,9 +512,9 @@ export function WhatsAppPage() {
 
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Add WhatsApp instance" footer={<><button className="btn-ghost" onClick={() => setShowCreate(false)}>Cancel</button><button className="btn-primary" disabled={createMutation.isPending || !form.assigned_user_id || !form.label.trim()} onClick={() => createMutation.mutate()}>{createMutation.isPending ? "Creating…" : "Create instance"}</button></>}>
         <div className="flex flex-col gap-4">
-          <p className="text-sm text-ink-500">Create a separate session for one employee. The bridge token is shown only once after creation.</p>
+          <p className="text-sm text-ink-500">One instance equals one WhatsApp number and one isolated session. Repeat this form for every telecaller number you want to monitor. The bridge token is shown only once after creation.</p>
           <div><label className="mb-1.5 block text-xs font-medium text-ink-500" htmlFor="whatsapp-instance-label">Instance name</label><input id="whatsapp-instance-label" className="input" placeholder="Priya · Sales WhatsApp" value={form.label} onChange={(event) => setForm({ ...form, label: event.target.value })} /></div>
-          <div><label className="mb-1.5 block text-xs font-medium text-ink-500" htmlFor="whatsapp-instance-employee">Assigned employee</label><select id="whatsapp-instance-employee" className="input" value={form.assigned_user_id} onChange={(event) => setForm({ ...form, assigned_user_id: event.target.value })}><option value="" disabled>Select an employee</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} · {employee.role.replace("_", " ")}</option>)}</select></div>
+          <div><label className="mb-1.5 block text-xs font-medium text-ink-500" htmlFor="whatsapp-instance-employee">Assigned employee</label><select id="whatsapp-instance-employee" className="input" value={form.assigned_user_id} onChange={(event) => setForm({ ...form, assigned_user_id: event.target.value })}><option value="" disabled>Select an employee</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} · {employee.role.replace("_", " ")}</option>)}</select>{form.assigned_user_id && <p className="mt-1 text-xs text-ink-500">{instances.filter((instance) => instance.assigned_user_id === form.assigned_user_id).length} existing {instances.filter((instance) => instance.assigned_user_id === form.assigned_user_id).length === 1 ? "number" : "numbers"} assigned to this employee.</p>}</div>
           <div><label className="mb-1.5 block text-xs font-medium text-ink-500" htmlFor="whatsapp-instance-phone">WhatsApp number <span className="font-normal text-ink-300">(optional)</span></label><input id="whatsapp-instance-phone" className="input" placeholder="+91 99999 00000" value={form.phone_number} onChange={(event) => setForm({ ...form, phone_number: event.target.value })} /><p className="mt-1 text-xs text-ink-500">This is a label for the admin view; the connected bridge remains the source of truth.</p></div>
         </div>
       </Modal>

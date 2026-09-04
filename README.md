@@ -111,6 +111,12 @@ The web app is now live at `http://localhost:5173`.
 - Real telephony, billing, and Firebase/BaaS integrations are intentionally out of scope for this phase.
 - WhatsApp tracking is admin-only. Admins can create multiple named instances per employee, click Connect to display a per-number WhatsApp Web QR code, and review the messages delivered by that instance. The private `whatsapp-bridge` service persists each session and posts `status` or `message` events to the instance webhook. This is an unofficial WhatsApp Web integration; use the official WhatsApp Cloud API when Meta-supported automation is required. The CRM does not store WhatsApp passwords or expose employee messages to managers/telecallers.
 
+### Multiple WhatsApp numbers
+
+Create one WhatsApp instance for each telecaller number from **Admin → WhatsApp**. You can assign several instances to the same employee when they operate more than one number. Select **Connect** on each row and scan that row’s QR code from the matching phone’s **WhatsApp → Linked devices** screen. Each instance has a unique session key, isolated persisted authentication directory, status, QR code, and message stream, so connecting or disconnecting one number does not affect the others. Use the employee summary’s **+** button to add another number without losing the assignment context.
+
+This is a CRM-integrated WhatsApp Web bridge, not an embedded `web.whatsapp.com` browser window. A browser WebView would require a separate linked-device session and would not provide the admin message stream, sender identity, or group-chat tracking implemented here.
+
 ## Production deployment
 
 For the single-instance AWS EC2 deployment, use [DEPLOY_AWS_EC2.md](./DEPLOY_AWS_EC2.md).

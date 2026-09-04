@@ -150,6 +150,57 @@ async def test_group_message_keeps_chat_and_participant_identity(client, db_sess
 
 
 @pytest.mark.asyncio
+async def test_each_employee_number_has_an_isolated_instance_and_message_stream(client, db_session):
+    org, admin = await create_org_with_admin(db_session, admin_phone="9300000041")
+    first_employee = await _member(db_session, org.id, "First Telecaller", "9300000042", UserRole.telecaller)
+    second_employee = await _member(db_session, org.id, "Second Telecaller", "9300000043", UserRole.telecaller)
+    headers = _headers(admin)
+
+    first_response = await client.post(
+        "/api/whatsapp/instances",
+        headers=headers,
+        json={"assigned_user_id": str(first_employee.id), "label": "First number"},
+    )
+    second_response = await client.post(
+        "/api/whatsapp/instances",
+        headers=headers,
+        json={"assigned_user_id": str(second_employee.id), "label": "Second number"},
+    )
+    assert first_response.status_code == 201
+    assert second_response.status_code == 201
+    first = first_response.json()
+    second = second_response.json()
+    assert first["session_key"] != second["session_key"]
+
+    now = datetime.now(timezone.utc).isoformat()
+    for instance, phone, external_id in (
+        (first, "+919311110001", "first-message"),
+        (second, "+919311110002", "second-message"),
+    ):
+        response = await client.post(
+            f"/api/whatsapp/webhook/{instance['id']}",
+            headers={"X-WhatsApp-Token": instance["webhook_token"]},
+            json={
+                "event": "message",
+                "message": {
+                    "external_message_id": external_id,
+                    "contact_phone": phone,
+                    "direction": "inbound",
+                    "body": external_id,
+                    "sent_at": now,
+                },
+            },
+        )
+        assert response.status_code == 202
+        assert response.json()["accepted"] == 1
+
+    first_messages = await client.get(f"/api/whatsapp/instances/{first['id']}/messages", headers=headers)
+    second_messages = await client.get(f"/api/whatsapp/instances/{second['id']}/messages", headers=headers)
+    assert [item["body"] for item in first_messages.json()["items"]] == ["first-message"]
+    assert [item["body"] for item in second_messages.json()["items"]] == ["second-message"]
+
+
+@pytest.mark.asyncio
 async def test_admin_can_receive_and_view_instance_qr(client, db_session):
     org, admin = await create_org_with_admin(db_session, admin_phone="9300000021")
     telecaller = await _member(db_session, org.id, "QR Telecaller", "9300000022", UserRole.telecaller)
