@@ -28,6 +28,7 @@ export interface WhatsAppInstanceOut {
   created_at: string;
   webhook_url: string;
   webhook_token: string | null;
+  qr_code: string | null;
 }
 
 export interface WhatsAppMessageOut {

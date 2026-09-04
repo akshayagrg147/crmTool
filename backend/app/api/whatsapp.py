@@ -3,10 +3,11 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import Integer, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.crypto import encrypt_json, decrypt_json
 from app.core.database import get_db
 from app.core.deps import CurrentUser, require_admin
 from app.core.security import hash_password, verify_password
@@ -100,7 +101,44 @@ async def _instance_out(
         created_at=instance.created_at,
         webhook_url=_webhook_url(instance.id),
         webhook_token=token,
+        qr_code=instance.qr_code,
     )
+
+
+async def _bridge_request(method: str, path: str, payload: dict | None = None) -> None:
+    """Start/stop a session in the private bridge, when configured."""
+    if not settings.whatsapp_bridge_url:
+        raise RuntimeError("WhatsApp Web bridge is not configured")
+    import httpx
+
+    headers = {"Authorization": f"Bearer {settings.whatsapp_bridge_token}"}
+    url = f"{settings.whatsapp_bridge_url.rstrip('/')}/{path.lstrip('/')}"
+    async with httpx.AsyncClient(timeout=settings.whatsapp_bridge_timeout_seconds) as client:
+        response = await client.request(method, url, json=payload)
+    if response.is_error:
+        detail = response.text[:500] or response.reason_phrase
+        raise RuntimeError(f"WhatsApp bridge returned {response.status_code}: {detail}")
+
+
+async def _start_bridge_session(instance: WhatsAppInstance) -> None:
+    secret = decrypt_json(instance.webhook_secret_encrypted).get("token")
+    if not secret:
+        raise RuntimeError("Rotate the bridge token for this instance before connecting")
+    await _bridge_request(
+        "POST",
+        "/sessions",
+        {
+            "session_key": instance.session_key,
+            "webhook_url": _webhook_url(instance.id),
+            "webhook_token": secret,
+        },
+    )
+
+
+async def _stop_bridge_session(instance: WhatsAppInstance) -> None:
+    if not settings.whatsapp_bridge_url:
+        return
+    await _bridge_request("DELETE", f"/sessions/{instance.session_key}")
 
 
 def _message_out(message: WhatsAppMessage) -> WhatsAppMessageOut:
@@ -145,6 +183,7 @@ async def create_instance(
         phone_number=payload.phone_number.strip() if payload.phone_number else None,
         session_key=uuid.uuid4().hex,
         webhook_secret_hash=hash_password(token),
+        webhook_secret_encrypted=encrypt_json({"token": token}),
         status=WhatsAppInstanceStatus.disconnected.value,
         is_enabled=True,
     )
@@ -184,7 +223,15 @@ async def request_connect(
     instance.is_enabled = True
     instance.status = WhatsAppInstanceStatus.connecting.value
     instance.last_error = None
+    instance.qr_code = None
     await db.commit()
+    try:
+        await _start_bridge_session(instance)
+    except RuntimeError as exc:
+        instance.status = WhatsAppInstanceStatus.error.value
+        instance.last_error = str(exc)
+        await db.commit()
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
     await db.refresh(instance)
     return await _instance_out(db, instance)
 
@@ -199,7 +246,13 @@ async def disconnect_instance(
     instance.is_enabled = False
     instance.status = WhatsAppInstanceStatus.disconnected.value
     instance.last_error = None
+    instance.qr_code = None
     await db.commit()
+    try:
+        await _stop_bridge_session(instance)
+    except RuntimeError as exc:
+        instance.last_error = str(exc)
+        await db.commit()
     await db.refresh(instance)
     return await _instance_out(db, instance)
 
@@ -213,7 +266,19 @@ async def rotate_instance_token(
     instance = await _get_instance(db, current.organization_id, instance_id)
     token = secrets.token_urlsafe(32)
     instance.webhook_secret_hash = hash_password(token)
+    instance.webhook_secret_encrypted = encrypt_json({"token": token})
     await db.commit()
+    if instance.status in {WhatsAppInstanceStatus.connected.value, WhatsAppInstanceStatus.connecting.value}:
+        try:
+            await _stop_bridge_session(instance)
+            instance.status = WhatsAppInstanceStatus.connecting.value
+            instance.qr_code = None
+            await db.commit()
+            await _start_bridge_session(instance)
+        except RuntimeError as exc:
+            instance.status = WhatsAppInstanceStatus.error.value
+            instance.last_error = str(exc)
+            await db.commit()
     await db.refresh(instance)
     return await _instance_out(db, instance, token)
 
@@ -225,6 +290,10 @@ async def delete_instance(
     db: AsyncSession = Depends(get_db),
 ):
     instance = await _get_instance(db, current.organization_id, instance_id)
+    try:
+        await _stop_bridge_session(instance)
+    except RuntimeError:
+        pass
     await db.delete(instance)
     await db.commit()
 
@@ -371,6 +440,7 @@ async def receive_webhook(
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Status event requires status")
         instance.status = event.status.value
         instance.last_error = event.error
+        instance.qr_code = event.qr_code if event.status == WhatsAppInstanceStatus.connecting else None
         if event.status == WhatsAppInstanceStatus.connected:
             instance.last_connected_at = now
         await db.commit()

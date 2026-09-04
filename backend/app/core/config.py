@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     public_base_url: str = "http://localhost:8000"
     # How often the background poller pulls from pull-based providers.
     integration_poll_interval_seconds: int = 300
+    # Optional in-network WhatsApp Web bridge. The bridge is never exposed publicly.
+    whatsapp_bridge_url: str = ""
+    whatsapp_bridge_token: str = ""
+    whatsapp_bridge_timeout_seconds: int = 15
     backup_dir: str = "./data/backups"
     attachment_dir: str = "./data/attachments"
     max_attachment_size_bytes: int = 10 * 1024 * 1024

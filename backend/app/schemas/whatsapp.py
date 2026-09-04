@@ -55,6 +55,7 @@ class WhatsAppWebhookEvent(BaseModel):
     status: WhatsAppInstanceStatus | None = None
     phone_number: str | None = Field(default=None, max_length=30)
     error: str | None = Field(default=None, max_length=1000)
+    qr_code: str | None = Field(default=None, max_length=200_000)
     message: WhatsAppMessageIn | None = None
 
 
@@ -79,6 +80,7 @@ class WhatsAppInstanceOut(BaseModel):
     created_at: datetime
     webhook_url: str
     webhook_token: str | None = None
+    qr_code: str | None = None
 
 
 class WhatsAppMessageOut(BaseModel):

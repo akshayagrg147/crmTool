@@ -41,8 +41,12 @@ class WhatsAppInstance(Base):
     session_key: Mapped[str] = mapped_column(String(80), nullable=False, unique=True, index=True)
     # Hashed token for the bridge webhook. The clear token is returned once on create/rotate.
     webhook_secret_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Encrypted copy used only by the first-party bridge when an admin starts a session.
+    webhook_secret_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default=WhatsAppInstanceStatus.disconnected.value, index=True)
     is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Latest QR data URL. It is short-lived and cleared as soon as the session connects.
+    qr_code: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_connected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

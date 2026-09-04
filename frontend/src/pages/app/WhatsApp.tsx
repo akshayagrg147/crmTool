@@ -7,6 +7,7 @@ import {
   Eye,
   MessageCircleMore,
   Plus,
+  QrCode,
   RefreshCw,
   RotateCw,
   ShieldCheck,
@@ -95,10 +96,15 @@ export function WhatsAppPage() {
   const [selected, setSelected] = useState<WhatsAppInstanceOut | null>(null);
   const [removeTarget, setRemoveTarget] = useState<WhatsAppInstanceOut | null>(null);
   const [tokenNotice, setTokenNotice] = useState<{ instance: WhatsAppInstanceOut; token: string } | null>(null);
+  const [qrInstanceId, setQrInstanceId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [form, setForm] = useState({ assigned_user_id: "", label: "", phone_number: "" });
 
-  const instancesQuery = useQuery({ queryKey: ["whatsapp-instances"], queryFn: whatsappApi.instances });
+  const instancesQuery = useQuery({
+    queryKey: ["whatsapp-instances"],
+    queryFn: whatsappApi.instances,
+    refetchInterval: (query) => query.state.data?.some((instance) => instance.status === "connecting") ? 3000 : false,
+  });
   const overviewQuery = useQuery({ queryKey: ["whatsapp-overview"], queryFn: whatsappApi.overview });
   const teamQuery = useQuery({ queryKey: ["team"], queryFn: usersApi.list });
   const messagesQuery = useQuery({
@@ -146,7 +152,13 @@ export function WhatsAppPage() {
     onSuccess: (instance, variables) => {
       invalidate();
       if (variables.action === "rotate" && instance.webhook_token) setTokenNotice({ instance, token: instance.webhook_token });
-      else toast(variables.action === "connect" ? "Connection request queued" : "Instance disconnected", "success");
+      else if (variables.action === "connect") {
+        setQrInstanceId(instance.id);
+        toast("WhatsApp Web is starting — scan the QR code", "success");
+      } else {
+        setQrInstanceId(null);
+        toast("Instance disconnected", "success");
+      }
     },
     onError: (error: any) => toast(error?.response?.data?.detail ?? "Couldn’t update the instance.", "error"),
   });
@@ -172,6 +184,7 @@ export function WhatsAppPage() {
 
   const instances = instancesQuery.data ?? [];
   const overview = overviewQuery.data;
+  const qrInstance = qrInstanceId ? instances.find((instance) => instance.id === qrInstanceId) ?? null : null;
 
   function copyToken() {
     if (!tokenNotice) return;
@@ -255,7 +268,7 @@ export function WhatsAppPage() {
                       <td className="px-5 py-3"><StatusPill status={instance.status} />{instance.last_error && <p className="mt-1 max-w-40 truncate text-[11px] text-danger" title={instance.last_error}>{instance.last_error}</p>}</td>
                       <td className="px-5 py-3 text-ink-700">{instance.message_count}{instance.unread_count > 0 && <span className="ml-1 text-xs font-semibold text-warning">({instance.unread_count} new)</span>}</td>
                       <td className="px-5 py-3 text-xs text-ink-500">{timeAgo(instance.last_message_at || instance.last_seen_at)}</td>
-                      <td className="px-5 py-3"><div className="flex justify-end gap-1"><button className="btn-ghost h-9 px-2.5 text-xs" onClick={() => setSelected(instance)}><Eye size={14} /> View</button><button className="btn-ghost h-9 px-2.5 text-xs" onClick={() => actionMutation.mutate({ id: instance.id, action: instance.status === "connected" ? "disconnect" : "connect" })} disabled={actionMutation.isPending}>{instance.status === "connected" ? <><WifiOff size={14} /> Stop</> : <><Wifi size={14} /> Connect</>}</button><button className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-danger hover:bg-danger/10" onClick={() => setRemoveTarget(instance)} aria-label={`Remove ${instance.label}`}><Trash2 size={15} /></button></div></td>
+                      <td className="px-5 py-3"><div className="flex justify-end gap-1"><button className="btn-ghost h-9 px-2.5 text-xs" onClick={() => setSelected(instance)}><Eye size={14} /> View</button>{(instance.qr_code || instance.status === "connecting") && <button className="btn-ghost h-9 px-2.5 text-xs" onClick={() => setQrInstanceId(instance.id)}><QrCode size={14} /> QR</button>}<button className="btn-ghost h-9 px-2.5 text-xs" onClick={() => { if (instance.status !== "connected") setQrInstanceId(instance.id); actionMutation.mutate({ id: instance.id, action: instance.status === "connected" ? "disconnect" : "connect" }); }} disabled={actionMutation.isPending}>{instance.status === "connected" ? <><WifiOff size={14} /> Stop</> : <><Wifi size={14} /> Connect</>}</button><button className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-danger hover:bg-danger/10" onClick={() => setRemoveTarget(instance)} aria-label={`Remove ${instance.label}`}><Trash2 size={15} /></button></div></td>
                     </tr>
                   ))}
                 </tbody>
@@ -263,7 +276,7 @@ export function WhatsAppPage() {
             </div>
             <div className="divide-y divide-ink-100 md:hidden">
               {instances.map((instance) => (
-                <article key={instance.id} className="p-4"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold text-ink-900">{instance.label}</p><p className="mt-0.5 text-xs text-ink-500">{instance.assigned_user_name} · {instance.phone_number || "Number pending"}</p></div><StatusPill status={instance.status} /></div><div className="mt-3 grid grid-cols-2 gap-2 rounded-lg border border-ink-100 bg-[#F8F7F3] p-3 text-xs"><div><p className="text-ink-400">Messages</p><p className="mt-0.5 font-medium text-ink-700">{instance.message_count}{instance.unread_count ? ` · ${instance.unread_count} new` : ""}</p></div><div><p className="text-ink-400">Last activity</p><p className="mt-0.5 font-medium text-ink-700">{timeAgo(instance.last_message_at || instance.last_seen_at)}</p></div></div><div className="mt-3 flex gap-2"><button className="btn-secondary flex-1 text-xs" onClick={() => setSelected(instance)}><Eye size={14} /> View messages</button><button className="btn-ghost text-xs" onClick={() => actionMutation.mutate({ id: instance.id, action: instance.status === "connected" ? "disconnect" : "connect" })}>{instance.status === "connected" ? <WifiOff size={14} /> : <Wifi size={14} />}</button></div></article>
+                <article key={instance.id} className="p-4"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold text-ink-900">{instance.label}</p><p className="mt-0.5 text-xs text-ink-500">{instance.assigned_user_name} · {instance.phone_number || "Number pending"}</p></div><StatusPill status={instance.status} /></div><div className="mt-3 grid grid-cols-2 gap-2 rounded-lg border border-ink-100 bg-[#F8F7F3] p-3 text-xs"><div><p className="text-ink-400">Messages</p><p className="mt-0.5 font-medium text-ink-700">{instance.message_count}{instance.unread_count ? ` · ${instance.unread_count} new` : ""}</p></div><div><p className="text-ink-400">Last activity</p><p className="mt-0.5 font-medium text-ink-700">{timeAgo(instance.last_message_at || instance.last_seen_at)}</p></div></div><div className="mt-3 flex gap-2"><button className="btn-secondary flex-1 text-xs" onClick={() => setSelected(instance)}><Eye size={14} /> View messages</button>{(instance.qr_code || instance.status === "connecting") && <button className="btn-ghost text-xs" onClick={() => setQrInstanceId(instance.id)}><QrCode size={14} /></button>}<button className="btn-ghost text-xs" onClick={() => { if (instance.status !== "connected") setQrInstanceId(instance.id); actionMutation.mutate({ id: instance.id, action: instance.status === "connected" ? "disconnect" : "connect" }); }}>{instance.status === "connected" ? <WifiOff size={14} /> : <Wifi size={14} />}</button></div></article>
               ))}
             </div>
           </>
@@ -283,8 +296,12 @@ export function WhatsAppPage() {
         {selected && <div className="flex flex-col gap-4"><div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ink-100 bg-[#F8F7F3] p-3"><div><p className="font-medium text-ink-900">{selected.assigned_user_name}</p><p className="mt-0.5 text-xs text-ink-500">{selected.phone_number || "Number pending"} · <StatusPill status={selected.status} /></p></div><button className="btn-ghost text-xs" onClick={() => actionMutation.mutate({ id: selected.id, action: "rotate" })}><RotateCw size={14} /> Rotate bridge token</button></div>{messagesQuery.isLoading ? <TableSkeleton rows={4} cols={2} /> : messagesQuery.data?.items.length ? <div className="flex max-h-[52dvh] flex-col gap-2 overflow-y-auto pr-1">{messagesQuery.data.items.map((message) => <MessageRow key={message.id} message={message} onRead={() => readMutation.mutate({ instanceId: selected.id, messageId: message.id })} />)}</div> : <EmptyState icon={MessageCircleMore} title="No messages tracked" message="Messages will appear here when the connected WhatsApp bridge posts events to this instance webhook." />}</div>}
       </Modal>
 
+      <Modal open={!!qrInstanceId} onClose={() => setQrInstanceId(null)} title={qrInstance ? `${qrInstance.label} · WhatsApp Web` : "WhatsApp Web"} size="md" footer={<button className="btn-secondary" onClick={() => setQrInstanceId(null)}>Close</button>}>
+        {qrInstance && <div className="flex flex-col items-center gap-4 text-center"><div className="w-full rounded-xl border border-ink-100 bg-[#F8F7F3] p-4"><p className="font-semibold text-ink-900">{qrInstance.status === "connected" ? "WhatsApp Web connected" : "Scan this QR code"}</p><p className="mt-1 text-sm text-ink-500">On the employee’s phone, open WhatsApp → Linked devices → Link a device.</p>{qrInstance.qr_code ? <img className="mx-auto mt-4 h-64 w-64 rounded-lg bg-white p-2" src={qrInstance.qr_code} alt="WhatsApp Web QR code" /> : <div className="mx-auto mt-5 flex h-64 w-64 items-center justify-center rounded-lg border border-dashed border-ink-200 bg-white px-6 text-sm text-ink-500">{qrInstance.status === "connecting" ? "Generating a fresh QR code…" : qrInstance.status === "connected" ? "This number is already linked." : qrInstance.last_error || "Start the connection to generate a QR code."}</div>}</div><p className="text-xs text-ink-500">This QR code is private to this instance and expires shortly. Do not share screenshots of it.</p></div>}
+      </Modal>
+
       <Modal open={!!tokenNotice} onClose={() => setTokenNotice(null)} title="Bridge token — copy it now" size="md" footer={<button className="btn-primary" onClick={() => setTokenNotice(null)}>Done</button>}>
-        {tokenNotice && <div className="flex flex-col gap-4"><div className="flex items-start gap-3 rounded-xl border border-warning/25 bg-warning/5 p-3"><CircleAlert size={18} className="mt-0.5 shrink-0 text-warning" /><p className="text-sm text-ink-700">This token is displayed once. Store it in the WhatsApp bridge as <code className="rounded bg-white px-1 py-0.5 text-xs">X-WhatsApp-Token</code>; never share it with employees.</p></div><div><label className="mb-1.5 block text-xs font-medium text-ink-500">Webhook URL</label><div className="flex gap-2"><input className="input font-mono text-xs" readOnly value={tokenNotice.instance.webhook_url} /><button className="btn-secondary shrink-0" onClick={() => { void navigator.clipboard.writeText(tokenNotice.instance.webhook_url); }} aria-label="Copy webhook URL"><Copy size={15} /></button></div></div><div><label className="mb-1.5 block text-xs font-medium text-ink-500">Webhook token</label><div className="flex gap-2"><input className="input font-mono text-xs" readOnly value={tokenNotice.token} /><button className="btn-secondary shrink-0" onClick={copyToken} aria-label="Copy webhook token">{copied ? <Check size={15} /> : <Copy size={15} />}</button></div></div><p className="text-xs text-ink-500">The external bridge should send <code className="rounded bg-ink-50 px-1">status</code> and <code className="rounded bg-ink-50 px-1">message</code> events to this URL.</p></div>}
+        {tokenNotice && <div className="flex flex-col gap-4"><div className="flex items-start gap-3 rounded-xl border border-warning/25 bg-warning/5 p-3"><CircleAlert size={18} className="mt-0.5 shrink-0 text-warning" /><p className="text-sm text-ink-700">This token is displayed once. It is used by the private bridge to post events for this number; never share it with employees.</p></div><div><label className="mb-1.5 block text-xs font-medium text-ink-500">Webhook URL</label><div className="flex gap-2"><input className="input font-mono text-xs" readOnly value={tokenNotice.instance.webhook_url} /><button className="btn-secondary shrink-0" onClick={() => { void navigator.clipboard.writeText(tokenNotice.instance.webhook_url); }} aria-label="Copy webhook URL"><Copy size={15} /></button></div></div><div><label className="mb-1.5 block text-xs font-medium text-ink-500">Webhook token</label><div className="flex gap-2"><input className="input font-mono text-xs" readOnly value={tokenNotice.token} /><button className="btn-secondary shrink-0" onClick={copyToken} aria-label="Copy webhook token">{copied ? <Check size={15} /> : <Copy size={15} />}</button></div></div><p className="text-xs text-ink-500">The token is normally managed automatically by the bridge. Use it only when configuring a compatible external bridge.</p></div>}
       </Modal>
 
       <ConfirmModal open={!!removeTarget} onClose={() => setRemoveTarget(null)} onConfirm={() => removeTarget && removeMutation.mutate(removeTarget.id)} title="Remove WhatsApp instance?" message={`This will permanently remove ${removeTarget?.label ?? "this instance"} and its tracked message history. The external WhatsApp session must also be stopped in the bridge.`} confirmLabel="Remove instance" isLoading={removeMutation.isPending} />

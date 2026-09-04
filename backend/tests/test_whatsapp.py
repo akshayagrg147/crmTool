@@ -102,6 +102,28 @@ async def test_admin_can_create_track_and_review_instance_messages(client, db_se
 
 
 @pytest.mark.asyncio
+async def test_admin_can_receive_and_view_instance_qr(client, db_session):
+    org, admin = await create_org_with_admin(db_session, admin_phone="9300000021")
+    telecaller = await _member(db_session, org.id, "QR Telecaller", "9300000022", UserRole.telecaller)
+    admin_headers = _headers(admin)
+    created = await client.post(
+        "/api/whatsapp/instances",
+        headers=admin_headers,
+        json={"assigned_user_id": str(telecaller.id), "label": "QR test"},
+    )
+    instance = created.json()
+    response = await client.post(
+        f"/api/whatsapp/webhook/{instance['id']}",
+        headers={"X-WhatsApp-Token": instance["webhook_token"]},
+        json={"event": "status", "status": "connecting", "qr_code": "data:image/png;base64,qr"},
+    )
+    assert response.status_code == 202
+    listed = await client.get("/api/whatsapp/instances", headers=admin_headers)
+    assert listed.status_code == 200
+    assert listed.json()[0]["qr_code"] == "data:image/png;base64,qr"
+
+
+@pytest.mark.asyncio
 async def test_webhook_requires_per_instance_token(client, db_session):
     org, admin = await create_org_with_admin(db_session, admin_phone="9300000011")
     telecaller = await _member(db_session, org.id, "Token Telecaller", "9300000012", UserRole.telecaller)
