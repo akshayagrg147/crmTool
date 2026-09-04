@@ -22,6 +22,11 @@ class WhatsAppMessageDirection(str, enum.Enum):
     outbound = "outbound"
 
 
+class WhatsAppChatType(str, enum.Enum):
+    direct = "direct"
+    group = "group"
+
+
 class WhatsAppInstance(Base):
     """A WhatsApp Web session owned by one organization employee."""
 
@@ -80,6 +85,16 @@ class WhatsAppMessage(Base):
     external_message_id: Mapped[str | None] = mapped_column(String(180), nullable=True, index=True)
     contact_phone: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
     contact_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # WhatsApp's remote JID identifies the conversation. It is different from
+    # the participant JID for group messages, so it must be stored separately
+    # from the legacy contact fields used by the first version of tracking.
+    chat_id: Mapped[str | None] = mapped_column(String(180), nullable=True, index=True)
+    chat_type: Mapped[str] = mapped_column(String(12), nullable=False, default=WhatsAppChatType.direct.value, index=True)
+    chat_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    sender_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    sender_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    recipient_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    recipient_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     direction: Mapped[str] = mapped_column(String(12), nullable=False, index=True)
     message_type: Mapped[str] = mapped_column(String(30), nullable=False, default="text")
     body: Mapped[str] = mapped_column(Text, nullable=False)

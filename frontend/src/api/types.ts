@@ -8,6 +8,7 @@ export type IntegrationStatus = "disconnected" | "active" | "error";
 
 export type WhatsAppInstanceStatus = "disconnected" | "connecting" | "connected" | "paused" | "error";
 export type WhatsAppMessageDirection = "inbound" | "outbound";
+export type WhatsAppChatType = "direct" | "group";
 
 export interface WhatsAppInstanceOut {
   id: string;
@@ -38,6 +39,13 @@ export interface WhatsAppMessageOut {
   external_message_id: string | null;
   contact_phone: string;
   contact_name: string | null;
+  chat_id: string | null;
+  chat_type: WhatsAppChatType;
+  chat_name: string | null;
+  sender_phone: string | null;
+  sender_name: string | null;
+  recipient_phone: string | null;
+  recipient_name: string | null;
   direction: WhatsAppMessageDirection;
   message_type: string;
   body: string;

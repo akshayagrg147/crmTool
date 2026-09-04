@@ -19,6 +19,7 @@ import {
   Smile,
   Trash2,
   UserRound,
+  UsersRound,
   Wifi,
   WifiOff,
 } from "lucide-react";
@@ -66,19 +67,37 @@ function StatCard({ label, value, tone = "primary" }: { label: string; value: nu
   );
 }
 
-function MessageRow({ message, onRead }: { message: WhatsAppMessageOut; onRead: () => void }) {
+function partyLabel(name: string | null, phone: string | null, fallback: string) {
+  return name || phone || fallback;
+}
+
+function messageRoute(message: WhatsAppMessageOut, instance?: WhatsAppInstanceOut | null) {
+  const employee = instance?.assigned_user_name || "Employee WhatsApp";
+  const contact = message.contact_name || message.contact_phone || "Contact";
+  const senderName = message.sender_name === "You" ? employee : message.sender_name;
+  const sender = partyLabel(senderName, message.sender_phone, message.direction === "outbound" ? employee : contact);
+  const recipient = message.chat_type === "group"
+    ? partyLabel(message.recipient_name || message.chat_name, message.recipient_phone || message.chat_id, "Group chat")
+    : partyLabel(message.recipient_name, message.recipient_phone, message.direction === "inbound" ? employee : contact);
+  return { sender, recipient };
+}
+
+function MessageRow({ message, instance, onRead }: { message: WhatsAppMessageOut; instance?: WhatsAppInstanceOut | null; onRead: () => void }) {
   const inbound = message.direction === "inbound";
+  const route = messageRoute(message, instance);
   return (
     <article className={`rounded-xl border p-3 ${message.is_read ? "border-ink-100 bg-white" : "border-primary/20 bg-primary/[0.035]"}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="font-medium text-ink-900">{message.contact_name || message.contact_phone}</p>
+            <p className="font-medium text-ink-900">{message.chat_name || message.contact_name || message.contact_phone}</p>
             <span className={`badge ${inbound ? "bg-secondary/10 text-secondary" : "bg-primary/10 text-primary"}`}>
               {inbound ? "Incoming" : "Outgoing"}
             </span>
+            {message.chat_type === "group" && <span className="badge gap-1 bg-accent/10 text-accent-dark"><UsersRound size={12} /> Group chat</span>}
             {!message.is_read && <span className="badge bg-accent/15 text-accent-dark">New</span>}
           </div>
+          <p className="mt-1 text-[11px] text-ink-400">From {route.sender} <span className="px-1">→</span> To {route.recipient}</p>
           <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-ink-700">{message.body}</p>
         </div>
         <div className="shrink-0 text-right">
@@ -135,21 +154,25 @@ function ChatMonitor({
   onMarkRead: (message: WhatsAppMessageOut) => void;
 }) {
   const [search, setSearch] = useState("");
-  const [activePhone, setActivePhone] = useState<string | null>(null);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const selectedInstance = instances.find((instance) => instance.id === selectedInstanceId) ?? null;
 
   const conversations = useMemo(() => {
     const grouped = new Map<string, WhatsAppMessageOut[]>();
     messages.forEach((message) => {
-      const key = message.contact_phone || message.contact_name || "Unknown contact";
+      const key = message.chat_id || `${message.chat_type}:${message.contact_phone || message.contact_name || "unknown"}`;
       grouped.set(key, [...(grouped.get(key) ?? []), message]);
     });
     return [...grouped.entries()]
-      .map(([phone, items]) => {
+      .map(([chatId, items]) => {
         const sorted = [...items].sort((a, b) => new Date(b.sent_at).getTime() - new Date(a.sent_at).getTime());
+        const chatType = sorted.some((message) => message.chat_type === "group") ? "group" : "direct";
+        const phone = sorted.find((message) => message.contact_phone)?.contact_phone || chatId;
         return {
+          chatId,
+          chatType,
           phone,
-          name: sorted.find((message) => message.contact_name)?.contact_name || phone,
+          name: chatType === "group" ? sorted.find((message) => message.chat_name)?.chat_name || "Group chat" : sorted.find((message) => message.chat_name || message.contact_name)?.chat_name || sorted.find((message) => message.contact_name)?.contact_name || phone,
           messages: sorted,
           latest: sorted[0],
           unread: sorted.filter((message) => !message.is_read && message.direction === "inbound").length,
@@ -159,16 +182,16 @@ function ChatMonitor({
   }, [messages]);
 
   useEffect(() => {
-    if (!conversations.some((conversation) => conversation.phone === activePhone)) {
-      setActivePhone(conversations[0]?.phone ?? null);
+    if (!conversations.some((conversation) => conversation.chatId === activeChatId)) {
+      setActiveChatId(conversations[0]?.chatId ?? null);
     }
-  }, [activePhone, conversations, selectedInstanceId]);
+  }, [activeChatId, conversations, selectedInstanceId]);
 
   const filteredConversations = conversations.filter((conversation) => {
     const query = search.trim().toLowerCase();
-    return !query || `${conversation.name} ${conversation.phone} ${conversation.latest.body}`.toLowerCase().includes(query);
+    return !query || `${conversation.name} ${conversation.phone} ${conversation.chatId} ${conversation.chatType} ${conversation.latest.body}`.toLowerCase().includes(query);
   });
-  const activeConversation = conversations.find((conversation) => conversation.phone === activePhone) ?? null;
+  const activeConversation = conversations.find((conversation) => conversation.chatId === activeChatId) ?? null;
   const activeMessages = activeConversation ? [...activeConversation.messages].sort((a, b) => new Date(a.sent_at).getTime() - new Date(b.sent_at).getTime()) : [];
 
   return (
@@ -212,12 +235,12 @@ function ChatMonitor({
             ) : (
               <div className="divide-y divide-ink-100">
                 {filteredConversations.map((conversation) => (
-                  <button key={conversation.phone} type="button" aria-pressed={conversation.phone === activePhone} onClick={() => setActivePhone(conversation.phone)} className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors ${conversation.phone === activePhone ? "bg-primary/[0.07]" : "hover:bg-primary/[0.035]"}`}>
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-bold text-primary">{initials(conversation.name)}</span>
+                  <button key={conversation.chatId} type="button" aria-pressed={conversation.chatId === activeChatId} onClick={() => setActiveChatId(conversation.chatId)} className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors ${conversation.chatId === activeChatId ? "bg-primary/[0.07]" : "hover:bg-primary/[0.035]"}`}>
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-bold text-primary">{conversation.chatType === "group" ? <UsersRound size={17} /> : initials(conversation.name)}</span>
                     <span className="min-w-0 flex-1">
-                      <span className="flex items-center justify-between gap-2"><span className="truncate text-sm font-semibold text-ink-900">{conversation.name}</span><span className="shrink-0 text-[10px] text-ink-400">{timeAgo(conversation.latest.sent_at)}</span></span>
+                      <span className="flex items-center justify-between gap-2"><span className="flex min-w-0 items-center gap-1.5"><span className="truncate text-sm font-semibold text-ink-900">{conversation.name}</span>{conversation.chatType === "group" && <span className="badge shrink-0 bg-accent/10 px-1.5 py-0.5 text-[9px] text-accent-dark">Group</span>}</span><span className="shrink-0 text-[10px] text-ink-400">{timeAgo(conversation.latest.sent_at)}</span></span>
                       <span className="mt-0.5 block truncate text-xs text-ink-500">{conversation.latest.body}</span>
-                      <span className="mt-1 flex items-center justify-between gap-2"><span className="truncate text-[10px] text-ink-400">{conversation.phone}</span>{conversation.unread > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold text-white">{conversation.unread}</span>}</span>
+                      <span className="mt-1 flex items-center justify-between gap-2"><span className="truncate text-[10px] text-ink-400">{conversation.chatType === "group" ? `Group chat · ${conversation.phone}` : conversation.phone}</span>{conversation.unread > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold text-white">{conversation.unread}</span>}</span>
                     </span>
                   </button>
                 ))}
@@ -231,8 +254,8 @@ function ChatMonitor({
             <>
               <header className="flex items-center justify-between gap-3 border-b border-ink-100 bg-white px-4 py-3 sm:px-6">
                 <div className="flex min-w-0 items-center gap-3">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-bold text-primary">{initials(activeConversation.name)}</span>
-                  <div className="min-w-0"><p className="truncate font-semibold text-ink-900">{activeConversation.name}</p><p className="mt-0.5 truncate text-xs text-ink-500">{activeConversation.phone} · {selectedInstance.assigned_user_name} · <StatusPill status={selectedInstance.status} /></p></div>
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-bold text-primary">{activeConversation.chatType === "group" ? <UsersRound size={17} /> : initials(activeConversation.name)}</span>
+                  <div className="min-w-0"><div className="flex items-center gap-2"><p className="truncate font-semibold text-ink-900">{activeConversation.name}</p>{activeConversation.chatType === "group" && <span className="badge gap-1 bg-accent/10 text-accent-dark"><UsersRound size={12} /> Group chat</span>}</div><p className="mt-0.5 truncate text-xs text-ink-500">{activeConversation.chatType === "group" ? `Group chat · ${activeConversation.phone}` : activeConversation.phone} · monitored for {selectedInstance.assigned_user_name} · <StatusPill status={selectedInstance.status} /></p></div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1 text-ink-400"><button type="button" className="icon-button" title="Read-only monitoring"><Info size={17} /></button><button type="button" className="icon-button" title="More options"><MoreHorizontal size={18} /></button></div>
               </header>
@@ -246,6 +269,7 @@ function ChatMonitor({
                         {showDay && <div className="my-3 flex justify-center"><span className="rounded-full border border-ink-100 bg-white px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-ink-400 shadow-sm">{messageDay(message.sent_at)}</span></div>}
                         <div className={`flex ${inbound ? "justify-start" : "justify-end"}`}>
                           <div className={`max-w-[88%] rounded-2xl px-3.5 py-2.5 shadow-sm sm:max-w-[72%] ${inbound ? "rounded-tl-md border border-ink-100 bg-white text-ink-800" : "rounded-tr-md border border-[#C7E7C9] bg-[#DDF4DF] text-ink-800"}`}>
+                            {(() => { const route = messageRoute(message, selectedInstance); return <p className="mb-1 text-[10px] font-medium text-ink-400">From {route.sender} <span className="px-1">→</span> To {route.recipient}</p>; })()}
                             <p className="whitespace-pre-wrap break-words text-sm leading-6">{message.body}</p>
                             <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-ink-400"><span>{messageTime(message.sent_at)}</span>{!inbound && <CheckCheck size={13} className="text-primary" />}{inbound && !message.is_read && <button type="button" onClick={() => onMarkRead(message)} className="ml-1 font-semibold text-primary hover:underline">Mark read</button>}</div>
                           </div>
@@ -491,7 +515,7 @@ export function WhatsAppPage() {
       </Modal>
 
       <Modal open={!!selected} onClose={() => setSelected(null)} title={selected ? `${selected.label} · messages` : "Messages"} size="lg" footer={<button className="btn-secondary" onClick={() => setSelected(null)}>Close</button>}>
-        {selected && <div className="flex flex-col gap-4"><div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ink-100 bg-[#F8F7F3] p-3"><div><p className="font-medium text-ink-900">{selected.assigned_user_name}</p><p className="mt-0.5 text-xs text-ink-500">{selected.phone_number || "Number pending"} · <StatusPill status={selected.status} /></p></div><button className="btn-ghost text-xs" onClick={() => actionMutation.mutate({ id: selected.id, action: "rotate" })}><RotateCw size={14} /> Rotate bridge token</button></div>{messagesQuery.isLoading ? <TableSkeleton rows={4} cols={2} /> : messagesQuery.data?.items.length ? <div className="flex max-h-[52dvh] flex-col gap-2 overflow-y-auto pr-1">{messagesQuery.data.items.map((message) => <MessageRow key={message.id} message={message} onRead={() => readMutation.mutate({ instanceId: selected.id, messageId: message.id })} />)}</div> : <EmptyState icon={MessageCircleMore} title="No messages tracked" message="Messages will appear here when the connected WhatsApp bridge posts events to this instance webhook." />}</div>}
+        {selected && <div className="flex flex-col gap-4"><div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ink-100 bg-[#F8F7F3] p-3"><div><p className="font-medium text-ink-900">{selected.assigned_user_name}</p><p className="mt-0.5 text-xs text-ink-500">{selected.phone_number || "Number pending"} · <StatusPill status={selected.status} /></p></div><button className="btn-ghost text-xs" onClick={() => actionMutation.mutate({ id: selected.id, action: "rotate" })}><RotateCw size={14} /> Rotate bridge token</button></div>{messagesQuery.isLoading ? <TableSkeleton rows={4} cols={2} /> : messagesQuery.data?.items.length ? <div className="flex max-h-[52dvh] flex-col gap-2 overflow-y-auto pr-1">{messagesQuery.data.items.map((message) => <MessageRow key={message.id} message={message} instance={selected} onRead={() => readMutation.mutate({ instanceId: selected.id, messageId: message.id })} />)}</div> : <EmptyState icon={MessageCircleMore} title="No messages tracked" message="Messages will appear here when the connected WhatsApp bridge posts events to this instance webhook." />}</div>}
       </Modal>
 
       <Modal open={!!qrInstanceId} onClose={() => setQrInstanceId(null)} title={qrInstance ? `${qrInstance.label} · WhatsApp Web` : "WhatsApp Web"} size="md" footer={<button className="btn-secondary" onClick={() => setQrInstanceId(null)}>Close</button>}>

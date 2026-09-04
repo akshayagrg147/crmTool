@@ -21,7 +21,7 @@ from app.models.payroll import (
     OrganizationWorkSchedule,
     TimeEntry,
 )
-from app.models.whatsapp import WhatsAppInstance, WhatsAppInstanceStatus, WhatsAppMessage, WhatsAppMessageDirection
+from app.models.whatsapp import WhatsAppChatType, WhatsAppInstance, WhatsAppInstanceStatus, WhatsAppMessage, WhatsAppMessageDirection
 
 __all__ = [
     "Organization",
@@ -51,4 +51,5 @@ __all__ = [
     "WhatsAppInstanceStatus",
     "WhatsAppMessage",
     "WhatsAppMessageDirection",
+    "WhatsAppChatType",
 ]

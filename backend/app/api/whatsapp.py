@@ -13,7 +13,7 @@ from app.core.deps import CurrentUser, require_admin
 from app.core.security import hash_password, verify_password
 from app.models.lead import Lead
 from app.models.user import User
-from app.models.whatsapp import WhatsAppInstance, WhatsAppInstanceStatus, WhatsAppMessage, WhatsAppMessageDirection
+from app.models.whatsapp import WhatsAppChatType, WhatsAppInstance, WhatsAppInstanceStatus, WhatsAppMessage, WhatsAppMessageDirection
 from app.schemas.whatsapp import (
     WhatsAppEmployeeSummary,
     WhatsAppInstanceCreate,
@@ -149,6 +149,13 @@ def _message_out(message: WhatsAppMessage) -> WhatsAppMessageOut:
         external_message_id=message.external_message_id,
         contact_phone=message.contact_phone,
         contact_name=message.contact_name,
+        chat_id=message.chat_id,
+        chat_type=WhatsAppChatType(message.chat_type),
+        chat_name=message.chat_name,
+        sender_phone=message.sender_phone,
+        sender_name=message.sender_name,
+        recipient_phone=message.recipient_phone,
+        recipient_name=message.recipient_name,
         direction=WhatsAppMessageDirection(message.direction),
         message_type=message.message_type,
         body=message.body,
@@ -473,19 +480,34 @@ async def receive_webhook(
             await db.commit()
             return {"accepted": 0, "message": "Message already recorded"}
     sent_at = payload.sent_at if payload.sent_at.tzinfo else payload.sent_at.replace(tzinfo=timezone.utc)
+    metadata = payload.metadata or {}
+    raw_chat_id = payload.chat_id or metadata.get("remote_jid") or payload.contact_phone or payload.sender_phone or payload.recipient_phone or "unknown"
+    chat_id = str(raw_chat_id).strip()
+    chat_type = payload.chat_type
+    if chat_type == WhatsAppChatType.direct and (chat_id.endswith("@g.us") or metadata.get("chat_type") == WhatsAppChatType.group.value):
+        chat_type = WhatsAppChatType.group
+    contact_phone = (payload.contact_phone or (chat_id.split("@", 1)[0] if chat_type == WhatsAppChatType.group else payload.sender_phone or payload.recipient_phone or "unknown")).strip()
+    chat_name = payload.chat_name.strip() if payload.chat_name else None
     message = WhatsAppMessage(
         organization_id=instance.organization_id,
         instance_id=instance.id,
         lead_id=payload.lead_id,
         external_message_id=payload.external_message_id,
-        contact_phone=payload.contact_phone.strip(),
+        contact_phone=contact_phone,
         contact_name=payload.contact_name.strip() if payload.contact_name else None,
+        chat_id=chat_id,
+        chat_type=chat_type.value,
+        chat_name=chat_name,
+        sender_phone=payload.sender_phone.strip() if payload.sender_phone else None,
+        sender_name=payload.sender_name.strip() if payload.sender_name else None,
+        recipient_phone=payload.recipient_phone.strip() if payload.recipient_phone else None,
+        recipient_name=payload.recipient_name.strip() if payload.recipient_name else None,
         direction=payload.direction.value,
         message_type=payload.message_type,
         body=payload.body,
         is_read=payload.direction == WhatsAppMessageDirection.outbound,
         sent_at=sent_at,
-        metadata_json=payload.metadata,
+        metadata_json=metadata,
     )
     instance.status = WhatsAppInstanceStatus.connected.value
     instance.last_connected_at = instance.last_connected_at or now

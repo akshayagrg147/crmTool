@@ -81,6 +81,9 @@ async def test_admin_can_create_track_and_review_instance_messages(client, db_se
     messages = await client.get(f"/api/whatsapp/instances/{instance['id']}/messages", headers=admin_headers)
     assert messages.status_code == 200
     assert messages.json()["total"] == 1
+    tracked = messages.json()["items"][0]
+    assert tracked["chat_type"] == "direct"
+    assert tracked["chat_id"] == "+919311112222"
     message_id = messages.json()["items"][0]["id"]
 
     marked = await client.post(
@@ -99,6 +102,51 @@ async def test_admin_can_create_track_and_review_instance_messages(client, db_se
 
     stored = await db_session.execute(select(WhatsAppMessage).where(WhatsAppMessage.instance_id == instance["id"]))
     assert len(stored.scalars().all()) == 1
+
+
+@pytest.mark.asyncio
+async def test_group_message_keeps_chat_and_participant_identity(client, db_session):
+    org, admin = await create_org_with_admin(db_session, admin_phone="9300000031")
+    telecaller = await _member(db_session, org.id, "Group Telecaller", "9300000032", UserRole.telecaller)
+    admin_headers = _headers(admin)
+    created = await client.post(
+        "/api/whatsapp/instances",
+        headers=admin_headers,
+        json={"assigned_user_id": str(telecaller.id), "label": "Group test"},
+    )
+    instance = created.json()
+    webhook_url = f"/api/whatsapp/webhook/{instance['id']}"
+    response = await client.post(
+        webhook_url,
+        headers={"X-WhatsApp-Token": instance["webhook_token"]},
+        json={
+            "event": "message",
+            "message": {
+                "external_message_id": "wamid-group-1",
+                "chat_id": "120363123456789@g.us",
+                "chat_type": "group",
+                "chat_name": "Sales team",
+                "contact_phone": "120363123456789",
+                "sender_phone": "+919311112222",
+                "sender_name": "Ravi",
+                "recipient_phone": "120363123456789",
+                "recipient_name": "Sales team",
+                "direction": "inbound",
+                "body": "Good morning team",
+                "sent_at": datetime.now(timezone.utc).isoformat(),
+            },
+        },
+    )
+    assert response.status_code == 202
+    messages = await client.get(f"/api/whatsapp/instances/{instance['id']}/messages", headers=admin_headers)
+    assert messages.status_code == 200
+    tracked = messages.json()["items"][0]
+    assert tracked["chat_type"] == "group"
+    assert tracked["chat_id"] == "120363123456789@g.us"
+    assert tracked["chat_name"] == "Sales team"
+    assert tracked["sender_phone"] == "+919311112222"
+    assert tracked["sender_name"] == "Ravi"
+    assert tracked["recipient_name"] == "Sales team"
 
 
 @pytest.mark.asyncio

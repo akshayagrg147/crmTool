@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models.whatsapp import WhatsAppInstanceStatus, WhatsAppMessageDirection
+from app.models.whatsapp import WhatsAppChatType, WhatsAppInstanceStatus, WhatsAppMessageDirection
 
 
 class WhatsAppInstanceCreate(BaseModel):
@@ -40,8 +40,15 @@ class WhatsAppInstanceUpdate(BaseModel):
 
 class WhatsAppMessageIn(BaseModel):
     external_message_id: str | None = Field(default=None, max_length=180)
-    contact_phone: str = Field(min_length=3, max_length=30)
+    contact_phone: str | None = Field(default=None, min_length=3, max_length=30)
     contact_name: str | None = Field(default=None, max_length=255)
+    chat_id: str | None = Field(default=None, min_length=1, max_length=180)
+    chat_type: WhatsAppChatType = WhatsAppChatType.direct
+    chat_name: str | None = Field(default=None, max_length=255)
+    sender_phone: str | None = Field(default=None, max_length=30)
+    sender_name: str | None = Field(default=None, max_length=255)
+    recipient_phone: str | None = Field(default=None, max_length=30)
+    recipient_name: str | None = Field(default=None, max_length=255)
     direction: WhatsAppMessageDirection
     message_type: str = Field(default="text", min_length=1, max_length=30)
     body: str = Field(min_length=1, max_length=10000)
@@ -92,6 +99,13 @@ class WhatsAppMessageOut(BaseModel):
     external_message_id: str | None
     contact_phone: str
     contact_name: str | None
+    chat_id: str | None
+    chat_type: WhatsAppChatType
+    chat_name: str | None
+    sender_phone: str | None
+    sender_name: str | None
+    recipient_phone: str | None
+    recipient_name: str | None
     direction: WhatsAppMessageDirection
     message_type: str
     body: str

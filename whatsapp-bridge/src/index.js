@@ -66,6 +66,68 @@ function messageType(message) {
   return Object.keys(message).find((key) => !key.endsWith("MessageContextInfo")) || "unknown";
 }
 
+async function groupSubject(session, socket, remoteJid) {
+  if (!remoteJid.endsWith("@g.us")) return null;
+  session.groupNames ||= new Map();
+  if (session.groupNames.has(remoteJid)) return session.groupNames.get(remoteJid);
+  try {
+    const metadata = await socket.groupMetadata(remoteJid);
+    const subject = metadata?.subject || null;
+    session.groupNames.set(remoteJid, subject);
+    return subject;
+  } catch (error) {
+    logger.debug({ err: error, remoteJid, sessionKey: session.config.session_key }, "Could not load WhatsApp group metadata");
+    return null;
+  }
+}
+
+async function postMessageEvent(session, socket, message) {
+  const remoteJid = message.key?.remoteJid;
+  const body = messageText(message.message);
+  if (!remoteJid || remoteJid.endsWith("@status") || !message.message || !body) return;
+
+  const fromMe = Boolean(message.key.fromMe);
+  const chatType = remoteJid.endsWith("@g.us") ? "group" : "direct";
+  const groupName = await groupSubject(session, socket, remoteJid);
+  const ownJid = socket.user?.id || null;
+  const participantJid = message.key?.participant || null;
+  const senderJid = fromMe ? ownJid : chatType === "group" ? participantJid || remoteJid : remoteJid;
+  const recipientJid = chatType === "group" ? remoteJid : fromMe ? remoteJid : ownJid;
+  const senderPhone = phoneFromJid(senderJid);
+  const recipientPhone = phoneFromJid(recipientJid);
+  const timestamp = Number(message.messageTimestamp || Math.floor(Date.now() / 1000));
+
+  await postWebhook(session, {
+    event: "message",
+    phone_number: phoneFromJid(ownJid),
+    message: {
+      external_message_id: message.key.id || null,
+      contact_phone: phoneFromJid(remoteJid) || remoteJid,
+      contact_name: chatType === "group" ? groupName : fromMe ? null : message.pushName || null,
+      chat_id: remoteJid,
+      chat_type: chatType,
+      chat_name: groupName,
+      sender_phone: senderPhone,
+      sender_name: fromMe ? "You" : message.pushName || null,
+      recipient_phone: recipientPhone,
+      recipient_name: chatType === "group" ? groupName : null,
+      direction: fromMe ? "outbound" : "inbound",
+      message_type: messageType(message.message),
+      body,
+      sent_at: new Date(timestamp * 1000).toISOString(),
+      metadata: {
+        remote_jid: remoteJid,
+        participant_jid: participantJid,
+        sender_jid: senderJid,
+        recipient_jid: recipientJid,
+        from_me: fromMe,
+        chat_type: chatType,
+        group_name: groupName,
+      },
+    },
+  });
+}
+
 async function writeSessionConfig(session) {
   const dir = sessionDir(session.config.session_key);
   await fs.mkdir(dir, { recursive: true });
@@ -153,27 +215,7 @@ async function openSocket(session) {
   socket.ev.on("messages.upsert", ({ messages, type }) => {
     if (type !== "notify") return;
     for (const message of messages) {
-      const remoteJid = message.key?.remoteJid;
-      const body = messageText(message.message);
-      if (!remoteJid || remoteJid.endsWith("@status") || !message.message || !body) continue;
-      const timestamp = Number(message.messageTimestamp || Math.floor(Date.now() / 1000));
-      void postWebhook(session, {
-        event: "message",
-        phone_number: phoneFromJid(session.socket?.user?.id),
-        message: {
-          external_message_id: message.key.id || null,
-          contact_phone: phoneFromJid(remoteJid) || remoteJid,
-          contact_name: message.pushName || null,
-          direction: message.key.fromMe ? "outbound" : "inbound",
-          message_type: messageType(message.message),
-          body,
-          sent_at: new Date(timestamp * 1000).toISOString(),
-          metadata: {
-            remote_jid: remoteJid,
-            from_me: Boolean(message.key.fromMe),
-          },
-        },
-      });
+      void postMessageEvent(session, socket, message);
     }
   });
 }
@@ -189,7 +231,7 @@ async function startSession(config) {
     if (!existing.socket) await openSocket(existing);
     return existing;
   }
-  const session = { config, socket: null, qr: null, reconnectTimer: null, closing: false };
+  const session = { config, socket: null, qr: null, reconnectTimer: null, closing: false, groupNames: new Map() };
   sessions.set(config.session_key, session);
   await writeSessionConfig(session);
   await openSocket(session);
