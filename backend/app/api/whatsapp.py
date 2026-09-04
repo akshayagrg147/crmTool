@@ -224,6 +224,13 @@ async def request_connect(
     instance.status = WhatsAppInstanceStatus.connecting.value
     instance.last_error = None
     instance.qr_code = None
+    # Instances created before the first-party bridge was introduced only have
+    # the hashed webhook token. Generate and persist an encrypted copy on the
+    # first connect so they can start a QR session without a manual rotation.
+    if not decrypt_json(instance.webhook_secret_encrypted).get("token"):
+        token = secrets.token_urlsafe(32)
+        instance.webhook_secret_hash = hash_password(token)
+        instance.webhook_secret_encrypted = encrypt_json({"token": token})
     await db.commit()
     try:
         await _start_bridge_session(instance)
