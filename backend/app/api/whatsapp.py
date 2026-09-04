@@ -114,7 +114,7 @@ async def _bridge_request(method: str, path: str, payload: dict | None = None) -
     headers = {"Authorization": f"Bearer {settings.whatsapp_bridge_token}"}
     url = f"{settings.whatsapp_bridge_url.rstrip('/')}/{path.lstrip('/')}"
     async with httpx.AsyncClient(timeout=settings.whatsapp_bridge_timeout_seconds) as client:
-        response = await client.request(method, url, json=payload)
+        response = await client.request(method, url, headers=headers, json=payload)
     if response.is_error:
         detail = response.text[:500] or response.reason_phrase
         raise RuntimeError(f"WhatsApp bridge returned {response.status_code}: {detail}")
