@@ -3,9 +3,10 @@ from datetime import datetime, timezone
 import pytest
 from sqlalchemy import select
 
+from app.api import whatsapp as whatsapp_api
 from app.core.security import create_access_token, hash_password
 from app.models.user import User, UserRole
-from app.models.whatsapp import WhatsAppMessage
+from app.models.whatsapp import WhatsAppInstanceStatus, WhatsAppMessage
 from tests.conftest import create_org_with_admin
 
 
@@ -285,6 +286,54 @@ async def test_admin_can_receive_and_view_instance_qr(client, db_session):
     listed = await client.get("/api/whatsapp/instances", headers=admin_headers)
     assert listed.status_code == 200
     assert listed.json()[0]["qr_code"] == "data:image/png;base64,qr"
+
+
+@pytest.mark.asyncio
+async def test_connect_requests_fresh_bridge_auth_after_whatsapp_logout(client, db_session, monkeypatch):
+    org, admin = await create_org_with_admin(db_session, admin_phone="9300000071")
+    telecaller = await _member(db_session, org.id, "Reconnect Telecaller", "9300000072", UserRole.telecaller)
+    admin_headers = _headers(admin)
+    created = await client.post(
+        "/api/whatsapp/instances",
+        headers=admin_headers,
+        json={"assigned_user_id": str(telecaller.id), "label": "Reconnect test"},
+    )
+    instance = created.json()
+    webhook_url = f"/api/whatsapp/webhook/{instance['id']}"
+    webhook_headers = {"X-WhatsApp-Token": instance["webhook_token"]}
+    logout = await client.post(
+        webhook_url,
+        headers=webhook_headers,
+        json={
+            "event": "status",
+            "status": "error",
+            "error": "WhatsApp Web session expired. Click Connect to generate a fresh QR code.",
+        },
+    )
+    assert logout.status_code == 202
+
+    bridge_calls = []
+
+    async def fake_bridge_request(method, path, payload=None):
+        bridge_calls.append((method, path, payload))
+
+    monkeypatch.setattr(whatsapp_api, "_bridge_request", fake_bridge_request)
+    response = await client.post(f"/api/whatsapp/instances/{instance['id']}/connect", headers=admin_headers)
+
+    assert response.status_code == 200
+    assert response.json()["status"] == WhatsAppInstanceStatus.connecting.value
+    assert bridge_calls == [
+        (
+            "POST",
+            "/sessions",
+            {
+                "session_key": instance["session_key"],
+                "webhook_url": f"http://localhost:8000/api/whatsapp/webhook/{instance['id']}",
+                "webhook_token": instance["webhook_token"],
+                "reset_auth": True,
+            },
+        )
+    ]
 
 
 @pytest.mark.asyncio

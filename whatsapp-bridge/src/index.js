@@ -18,6 +18,7 @@ const BRIDGE_API_TOKEN = process.env.BRIDGE_API_TOKEN || "";
 const logger = pino({ level: process.env.LOG_LEVEL || "info" });
 const sessions = new Map();
 let waWebVersionPromise;
+const LOGGED_OUT_ERROR = "WhatsApp Web session expired. Click Connect to generate a fresh QR code.";
 
 async function getWaWebVersion() {
   if (!waWebVersionPromise) {
@@ -241,6 +242,17 @@ async function writeSessionConfig(session) {
   await fs.writeFile(path.join(dir, "config.json"), JSON.stringify(session.config), { mode: 0o600 });
 }
 
+async function resetSessionAuth(session) {
+  // WhatsApp's logout invalidates the saved multi-file credentials. Remove
+  // only the bridge auth state; CRM messages live in Postgres and are kept.
+  await fs.rm(sessionDir(session.config.session_key), { recursive: true, force: true });
+  await writeSessionConfig(session);
+  session.qr = null;
+  session.groupNames = new Map();
+  session.lidToPhone = new Map();
+  session.lidLookups = new Map();
+}
+
 async function postWebhook(session, event) {
   try {
     const response = await fetch(session.config.webhook_url, {
@@ -315,12 +327,16 @@ async function openSocket(session) {
     }
     if (connection !== "close") return;
 
+    // A reset can intentionally detach an old socket before replacing its
+    // auth state. Ignore close events from sockets that are no longer active.
+    if (session.socket !== socket) return;
+
     session.socket = null;
     const statusCode = lastDisconnect?.error?.output?.statusCode;
     const loggedOut = statusCode === DisconnectReason.loggedOut || statusCode === DisconnectReason.forbidden;
     if (session.closing || loggedOut) {
       void postStatus(session, loggedOut ? "error" : "disconnected", {
-        error: loggedOut ? "WhatsApp Web logged out this session; connect again to show a new QR code." : null,
+        error: loggedOut ? LOGGED_OUT_ERROR : null,
       });
       return;
     }
@@ -335,13 +351,28 @@ async function openSocket(session) {
   });
 }
 
-async function startSession(config) {
+async function startSession(config, { resetAuth = false } = {}) {
   if (!config?.session_key || !config.webhook_url || !config.webhook_token) {
     throw new Error("session_key, webhook_url, and webhook_token are required");
   }
   const existing = sessions.get(config.session_key);
   if (existing) {
     existing.config = config;
+    existing.closing = false;
+    if (resetAuth) {
+      if (existing.reconnectTimer) {
+        clearTimeout(existing.reconnectTimer);
+        existing.reconnectTimer = null;
+      }
+      const oldSocket = existing.socket;
+      existing.socket = null;
+      try {
+        oldSocket?.end(undefined);
+      } catch (error) {
+        logger.debug({ err: error }, "WhatsApp socket already closed while resetting auth");
+      }
+      await resetSessionAuth(existing);
+    }
     await writeSessionConfig(existing);
     if (!existing.socket) await openSocket(existing);
     return existing;
@@ -357,6 +388,7 @@ async function startSession(config) {
     lidLookups: new Map(),
   };
   sessions.set(config.session_key, session);
+  if (resetAuth) await resetSessionAuth(session);
   await writeSessionConfig(session);
   await openSocket(session);
   return session;
@@ -390,7 +422,8 @@ app.get("/health", (_request, response) => response.json({ status: "ok", session
 app.use(requireBridgeAuth);
 app.post("/sessions", async (request, response) => {
   try {
-    const session = await startSession(request.body);
+    const { reset_auth: resetAuth, ...config } = request.body || {};
+    const session = await startSession(config, { resetAuth: Boolean(resetAuth) });
     response.status(202).json({ session_key: session.config.session_key, status: "connecting" });
   } catch (error) {
     logger.error({ err: error }, "Could not start WhatsApp Web session");

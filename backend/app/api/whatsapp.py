@@ -174,19 +174,31 @@ async def _bridge_request(method: str, path: str, payload: dict | None = None) -
         raise RuntimeError(f"WhatsApp bridge returned {response.status_code}: {detail}")
 
 
-async def _start_bridge_session(instance: WhatsAppInstance) -> None:
+def _needs_fresh_bridge_auth(instance: WhatsAppInstance) -> bool:
+    """Return true when WhatsApp rejected the saved linked-device session."""
+    if not instance.last_error:
+        return False
+    error = instance.last_error.lower()
+    return (
+        error.startswith("whatsapp web session expired")
+        or error.startswith("whatsapp web logged out this session")
+    )
+
+
+async def _start_bridge_session(instance: WhatsAppInstance, *, reset_auth: bool = False) -> None:
     secret = decrypt_json(instance.webhook_secret_encrypted).get("token")
     if not secret:
         raise RuntimeError("Rotate the bridge token for this instance before connecting")
-    await _bridge_request(
-        "POST",
-        "/sessions",
-        {
-            "session_key": instance.session_key,
-            "webhook_url": _webhook_url(instance.id),
-            "webhook_token": secret,
-        },
-    )
+    payload = {
+        "session_key": instance.session_key,
+        "webhook_url": _webhook_url(instance.id),
+        "webhook_token": secret,
+    }
+    if reset_auth:
+        # Reset only the bridge's invalid WhatsApp credentials. Tracked CRM
+        # messages remain in Postgres and are never removed by reconnecting.
+        payload["reset_auth"] = True
+    await _bridge_request("POST", "/sessions", payload)
 
 
 async def _stop_bridge_session(instance: WhatsAppInstance) -> None:
@@ -281,6 +293,7 @@ async def request_connect(
     db: AsyncSession = Depends(get_db),
 ):
     instance = await _get_instance(db, current.organization_id, instance_id)
+    reset_auth = _needs_fresh_bridge_auth(instance)
     instance.is_enabled = True
     instance.status = WhatsAppInstanceStatus.connecting.value
     instance.last_error = None
@@ -294,7 +307,7 @@ async def request_connect(
         instance.webhook_secret_encrypted = encrypt_json({"token": token})
     await db.commit()
     try:
-        await _start_bridge_session(instance)
+        await _start_bridge_session(instance, reset_auth=reset_auth)
     except RuntimeError as exc:
         instance.status = WhatsAppInstanceStatus.error.value
         instance.last_error = str(exc)
