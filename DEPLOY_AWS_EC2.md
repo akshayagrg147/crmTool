@@ -71,6 +71,14 @@ Open `https://talkocrm.com` in a browser. Caddy obtains the certificate after
 both DNS records resolve to the instance. The first backend startup runs all
 Alembic migrations automatically.
 
+The `attendance-closer` service must also show as running. It automatically
+closes any forgotten check-in at 12:00 AM in `ATTENDANCE_TIMEZONE`:
+
+```bash
+docker compose --env-file .env.production -f compose.prod.yml ps attendance-closer
+docker compose --env-file .env.production -f compose.prod.yml logs --tail=50 attendance-closer
+```
+
 Do not run `seed.py` in a real production environment because it creates known
 demo passwords. Create the first production super admin with a random password
 that never appears in shell history:
@@ -102,6 +110,7 @@ Deploy a later update:
 ```bash
 git pull --ff-only
 docker compose --env-file .env.production -f compose.prod.yml up -d --build
+docker compose --env-file .env.production -f compose.prod.yml ps attendance-closer
 ```
 
 Stop the stack without deleting data:

@@ -40,6 +40,7 @@ services:
       WHATSAPP_BRIDGE_URL: ${WHATSAPP_BRIDGE_URL:-http://whatsapp-bridge:3001}
       WHATSAPP_BRIDGE_TOKEN: ${WHATSAPP_BRIDGE_TOKEN:-}
       WHATSAPP_BRIDGE_TIMEOUT_SECONDS: ${WHATSAPP_BRIDGE_TIMEOUT_SECONDS:-15}
+      ATTENDANCE_TIMEZONE: ${ATTENDANCE_TIMEZONE:-Asia/Kolkata}
     depends_on:
       db:
         condition: service_healthy
@@ -55,6 +56,30 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    networks:
+      - private
+
+  attendance-closer:
+    build:
+      context: ./backend
+    command: ["python", "-m", "app.services.attendance_closer"]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-districall}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-districall}
+      ATTENDANCE_TIMEZONE: ${ATTENDANCE_TIMEZONE:-Asia/Kolkata}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "from datetime import datetime, timezone; from pathlib import Path; p = Path('/tmp/attendance-closer-health'); raise SystemExit(0 if p.exists() and (datetime.now(timezone.utc) - datetime.fromisoformat(p.read_text())).total_seconds() < 180 else 1)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
     networks:
       - private
 

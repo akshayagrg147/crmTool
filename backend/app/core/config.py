@@ -1,3 +1,6 @@
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,6 +26,9 @@ class Settings(BaseSettings):
     whatsapp_bridge_url: str = ""
     whatsapp_bridge_token: str = ""
     whatsapp_bridge_timeout_seconds: int = 15
+    # Attendance days are calculated in the workplace timezone rather than UTC.
+    # This makes an automatic checkout happen at the employee's local midnight.
+    attendance_timezone: str = "Asia/Kolkata"
     backup_dir: str = "./data/backups"
     attachment_dir: str = "./data/attachments"
     max_attachment_size_bytes: int = 10 * 1024 * 1024
@@ -34,6 +40,15 @@ class Settings(BaseSettings):
     s3_region: str = ""
     s3_endpoint_url: str = ""
     max_logo_size_bytes: int = 5 * 1024 * 1024
+
+    @field_validator("attendance_timezone")
+    @classmethod
+    def validate_attendance_timezone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError("ATTENDANCE_TIMEZONE must be a valid IANA timezone, such as Asia/Kolkata") from exc
+        return value
 
     @property
     def cors_origin_list(self) -> list[str]:

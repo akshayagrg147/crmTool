@@ -16,14 +16,26 @@ const categories: { value: TimeEntryCategory; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 const leaveTypes = ["casual", "sick", "planned", "personal", "other"] as const;
+const attendanceTimeZone = "Asia/Kolkata";
 
 function currentMonth() {
-  return new Date().toISOString().slice(0, 7);
+  return attendanceToday().slice(0, 7);
 }
 
 function todayForMonth(month: string) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = attendanceToday();
   return today.startsWith(month) ? today : `${month}-01`;
+}
+
+function attendanceToday() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: attendanceTimeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "";
+  return [part("year"), part("month"), part("day")].join("-");
 }
 
 function monthEnd(month: string) {
@@ -239,6 +251,7 @@ export function AttendancePage() {
                     ? "Configure the workplace location below before the team can record attendance."
                     : "Your admin has not configured a workplace location yet. Ask them to set it up before checking in."}
               </p>
+              <p className="mt-2 text-xs text-white/60">If you forget to check out, the session is automatically closed at 12:00 AM IST.</p>
               {todayRecord && <p className="mt-2 text-xs text-white/60">Checked in at {formatDateTime(todayRecord.checked_in_at)}{todayRecord.checked_out_at ? ` · Checked out at ${formatDateTime(todayRecord.checked_out_at)}` : ""}</p>}
             </div>
           </div>

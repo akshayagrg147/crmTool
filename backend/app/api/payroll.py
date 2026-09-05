@@ -20,6 +20,7 @@ from app.models.payroll import (
 )
 from app.models.organization import Organization
 from app.models.user import User, UserRole
+from app.services.attendance_clock import attendance_date_for, attendance_day_bounds, local_midnight_utc
 from app.schemas.payroll import (
     AttendanceApprovalsOut,
     AttendanceCheckIn,
@@ -51,7 +52,7 @@ attendance_router = APIRouter(prefix="/attendance", tags=["attendance"])
 
 
 def _month_window(month: str | None) -> tuple[str, date, date]:
-    value = month or datetime.now(timezone.utc).strftime("%Y-%m")
+    value = month or attendance_date_for().strftime("%Y-%m")
     try:
         parsed = datetime.strptime(value, "%Y-%m")
     except ValueError as exc:
@@ -163,7 +164,10 @@ def _attendance_out(record: AttendanceRecord, users: dict[uuid.UUID, User], now:
         organization_id=record.organization_id,
         user_id=record.user_id,
         user_name=user.name if user else None,
-        attendance_date=record.attendance_date,
+        # ``attendance_date`` was stored in UTC before attendance became
+        # timezone-aware. Deriving it from the check-in timestamp keeps old
+        # records on their real local calendar day without a risky data rewrite.
+        attendance_date=attendance_date_for(record.checked_in_at),
         checked_in_at=record.checked_in_at,
         checked_out_at=record.checked_out_at,
         check_in_accuracy_meters=float(record.check_in_accuracy_meters) if record.check_in_accuracy_meters is not None else None,
@@ -544,13 +548,19 @@ async def attendance_status(
     db: AsyncSession = Depends(get_db),
 ):
     organization = await _organization(db, current.organization_id)
-    today = datetime.now(timezone.utc).date()
+    now = datetime.now(timezone.utc)
+    today = attendance_date_for(now)
+    day_start, day_end = attendance_day_bounds(today)
     result = await db.execute(
-        select(AttendanceRecord).where(
+        select(AttendanceRecord)
+        .where(
             AttendanceRecord.organization_id == current.organization_id,
             AttendanceRecord.user_id == current.id,
-            AttendanceRecord.attendance_date == today,
+            AttendanceRecord.checked_in_at >= day_start,
+            AttendanceRecord.checked_in_at < day_end,
         )
+        .order_by(AttendanceRecord.checked_in_at.desc())
+        .limit(1)
     )
     record = result.scalar_one_or_none()
     users = {user.id: user for user in await _org_users(db, current.organization_id)}
@@ -572,13 +582,19 @@ async def check_in(
 ):
     organization = await _organization(db, current.organization_id)
     _assert_inside_location(organization, payload.latitude, payload.longitude)
-    today = datetime.now(timezone.utc).date()
+    checked_in_at = datetime.now(timezone.utc)
+    today = attendance_date_for(checked_in_at)
+    day_start, day_end = attendance_day_bounds(today)
     result = await db.execute(
-        select(AttendanceRecord).where(
+        select(AttendanceRecord)
+        .where(
             AttendanceRecord.organization_id == current.organization_id,
             AttendanceRecord.user_id == current.id,
-            AttendanceRecord.attendance_date == today,
+            AttendanceRecord.checked_in_at >= day_start,
+            AttendanceRecord.checked_in_at < day_end,
         )
+        .order_by(AttendanceRecord.checked_in_at.desc())
+        .limit(1)
     )
     if result.scalar_one_or_none() is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Attendance has already been recorded for today")
@@ -586,7 +602,7 @@ async def check_in(
         organization_id=current.organization_id,
         user_id=current.id,
         attendance_date=today,
-        checked_in_at=datetime.now(timezone.utc),
+        checked_in_at=checked_in_at,
         check_in_latitude=payload.latitude,
         check_in_longitude=payload.longitude,
         check_in_accuracy_meters=payload.accuracy_meters,
@@ -610,22 +626,37 @@ async def check_out(
 ):
     organization = await _organization(db, current.organization_id)
     _assert_inside_location(organization, payload.latitude, payload.longitude)
-    today = datetime.now(timezone.utc).date()
+    checked_out_at = datetime.now(timezone.utc)
+    today = attendance_date_for(checked_out_at)
+    day_start, day_end = attendance_day_bounds(today)
     result = await db.execute(
         select(AttendanceRecord)
         .where(
             AttendanceRecord.organization_id == current.organization_id,
             AttendanceRecord.user_id == current.id,
-            AttendanceRecord.attendance_date == today,
+            AttendanceRecord.checked_in_at >= day_start,
+            AttendanceRecord.checked_in_at < day_end,
+            AttendanceRecord.checked_out_at.is_(None),
         )
+        .order_by(AttendanceRecord.checked_in_at.desc())
+        .limit(1)
         .with_for_update()
     )
     record = result.scalar_one_or_none()
     if record is None:
+        completed_result = await db.execute(
+            select(AttendanceRecord.id)
+            .where(
+                AttendanceRecord.organization_id == current.organization_id,
+                AttendanceRecord.user_id == current.id,
+                AttendanceRecord.checked_in_at >= day_start,
+                AttendanceRecord.checked_in_at < day_end,
+            )
+            .limit(1)
+        )
+        if completed_result.scalar_one_or_none() is not None:
+            raise HTTPException(status.HTTP_409_CONFLICT, "Attendance has already been checked out for today")
         raise HTTPException(status.HTTP_409_CONFLICT, "Check in before checking out")
-    if record.checked_out_at is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Attendance has already been checked out for today")
-    checked_out_at = datetime.now(timezone.utc)
     record.checked_out_at = checked_out_at
     record.check_out_latitude = payload.latitude
     record.check_out_longitude = payload.longitude
@@ -638,7 +669,7 @@ async def check_out(
             TimeEntry(
                 organization_id=current.organization_id,
                 user_id=current.id,
-                entry_date=record.attendance_date,
+                entry_date=attendance_date_for(record.checked_in_at),
                 hours=round(worked_seconds / 3600, 2),
                 category="calling",
                 description="Attendance check-in session",
@@ -660,6 +691,8 @@ async def attendance_team(
     db: AsyncSession = Depends(get_db),
 ):
     month_value, month_start, month_end = _month_window(month)
+    month_start_at = local_midnight_utc(month_start)
+    month_end_at = local_midnight_utc(month_end)
     users = await _org_users(db, current.organization_id)
     visible_ids = {user.id for user in users}
     if current.role == UserRole.manager:
@@ -668,11 +701,11 @@ async def attendance_team(
         select(AttendanceRecord)
         .where(
             AttendanceRecord.organization_id == current.organization_id,
-            AttendanceRecord.attendance_date >= month_start,
-            AttendanceRecord.attendance_date < month_end,
+            AttendanceRecord.checked_in_at >= month_start_at,
+            AttendanceRecord.checked_in_at < month_end_at,
             AttendanceRecord.user_id.in_(visible_ids) if visible_ids else False,
         )
-        .order_by(AttendanceRecord.attendance_date.desc(), AttendanceRecord.checked_in_at.desc())
+        .order_by(AttendanceRecord.checked_in_at.desc())
     )
     user_map = {user.id: user for user in users}
     return AttendanceTeamOut(
@@ -688,6 +721,8 @@ async def attendance_overview(
     db: AsyncSession = Depends(get_db),
 ):
     month_value, month_start, month_end = _month_window(month)
+    month_start_at = local_midnight_utc(month_start)
+    month_end_at = local_midnight_utc(month_end)
     users = await _org_users(db, current.organization_id)
     user_map = {user.id: user for user in users}
     entries_result = await db.execute(
@@ -710,9 +745,9 @@ async def attendance_overview(
         select(AttendanceRecord).where(
             AttendanceRecord.organization_id == current.organization_id,
             AttendanceRecord.user_id == current.id,
-            AttendanceRecord.attendance_date >= month_start,
-            AttendanceRecord.attendance_date < month_end,
-        ).order_by(AttendanceRecord.attendance_date.desc(), AttendanceRecord.checked_in_at.desc())
+            AttendanceRecord.checked_in_at >= month_start_at,
+            AttendanceRecord.checked_in_at < month_end_at,
+        ).order_by(AttendanceRecord.checked_in_at.desc())
     )
     records = list(records_result.scalars().all())
     pending_count = 0
