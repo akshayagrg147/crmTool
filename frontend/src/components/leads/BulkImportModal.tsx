@@ -47,11 +47,20 @@ function issueLocation(issue: BulkImportIssue): string {
   return parts.length ? `${parts.join(" · ")}: ` : "";
 }
 
-export function BulkImportModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function BulkImportModal({
+  open,
+  onClose,
+  assignToCurrentUser = false,
+}: {
+  open: boolean;
+  onClose: () => void;
+  /** Telecaller uploads are automatically assigned to that signed-in user. */
+  assignToCurrentUser?: boolean;
+}) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [source, setSource] = useState<LeadSource>("indiamart");
+  const [source, setSource] = useState<LeadSource>(assignToCurrentUser ? "manual" : "indiamart");
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<{ rows: string[][]; count: number } | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -64,6 +73,7 @@ export function BulkImportModal({ open, onClose }: { open: boolean; onClose: () 
       queryClient.invalidateQueries({ queryKey: ["leads"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["lead-categories"] });
+      queryClient.invalidateQueries({ queryKey: ["lead-cities"] });
       setErrorMessage(null);
       setErrorIssues([]);
 
@@ -148,7 +158,7 @@ export function BulkImportModal({ open, onClose }: { open: boolean; onClose: () 
         reset();
         onClose();
       }}
-      title="Bulk Import Leads"
+      title={assignToCurrentUser ? "Upload My Leads" : "Bulk Import Leads"}
       size="lg"
       footer={
         <>
@@ -167,23 +177,34 @@ export function BulkImportModal({ open, onClose }: { open: boolean; onClose: () 
             </button>
           ) : (
             <button className="btn-primary" disabled={!file || mutation.isPending} onClick={() => mutation.mutate()}>
-              {mutation.isPending ? "Checking file..." : "Confirm & Import"}
+              {mutation.isPending
+                ? "Checking file..."
+                : assignToCurrentUser
+                  ? "Upload & Assign to Me"
+                  : "Confirm & Import"}
             </button>
           )}
         </>
       }
     >
       <div className="flex flex-col gap-4">
-        <div>
-          <label className="text-xs font-medium text-ink-500 mb-1.5 block">Source tag for this batch</label>
-          <select className="input" value={source} onChange={(e) => setSource(e.target.value as LeadSource)} disabled={mutation.isPending}>
-            {SOURCES.map((item) => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </div>
+        {assignToCurrentUser && (
+          <div className="rounded-xl border border-primary/20 bg-primary-soft/40 px-3.5 py-3 text-sm text-ink-700">
+            Every valid lead in this file will be assigned to you automatically. Admins and managers can see these leads in the shared workspace queue.
+          </div>
+        )}
+        {!assignToCurrentUser && (
+          <div>
+            <label className="text-xs font-medium text-ink-500 mb-1.5 block">Source tag for this batch</label>
+            <select className="input" value={source} onChange={(e) => setSource(e.target.value as LeadSource)} disabled={mutation.isPending}>
+              {SOURCES.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <div>
           <label className="text-xs font-medium text-ink-500 mb-1.5 block">CSV or XLSX file</label>
@@ -249,7 +270,8 @@ export function BulkImportModal({ open, onClose }: { open: boolean; onClose: () 
                 </p>
                 <p className="text-sm text-ink-600 mt-0.5">
                   {result.issue_count} issue{result.issue_count === 1 ? "" : "s"} found
-                  {result.skipped + result.duplicates_skipped > 0 ? ` · ${result.skipped + result.duplicates_skipped} row(s) skipped` : ""}.
+                  {result.skipped + result.duplicates_skipped > 0 ? ` · ${result.skipped + result.duplicates_skipped} row(s) skipped` : ""}
+                  {assignToCurrentUser && result.imported > 0 ? " · Assigned to you" : ""}.
                 </p>
               </div>
             </div>

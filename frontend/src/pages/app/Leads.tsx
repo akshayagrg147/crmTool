@@ -336,6 +336,14 @@ export function LeadsPage() {
           </div>
         </div>
         <div className="mt-6 flex w-full flex-wrap items-center gap-2 border-t border-white/10 pt-4">
+          {isTelecaller && (
+            <button
+              className="btn-secondary border-white/10 bg-white/[0.08] text-sm text-white hover:border-white/20 hover:bg-white/[0.14] hover:text-white"
+              onClick={() => setShowBulk(true)}
+            >
+              <UploadCloud size={16} /> Upload my leads
+            </button>
+          )}
           {canManage && (
             <>
               {canAdmin && (
@@ -874,7 +882,11 @@ export function LeadsPage() {
       )}
 
       <AddLeadModal open={showAdd} onClose={() => setShowAdd(false)} />
-      <BulkImportModal open={showBulk} onClose={() => setShowBulk(false)} />
+      <BulkImportModal
+        open={showBulk}
+        onClose={() => setShowBulk(false)}
+        assignToCurrentUser={isTelecaller}
+      />
       <CategoryManagerModal open={showCategories} onClose={() => setShowCategories(false)} />
       <CallLogModal
         open={!!callModalLead}

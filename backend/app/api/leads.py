@@ -1071,9 +1071,18 @@ async def mark_lead_lost(
 async def bulk_import_leads(
     source: LeadSource,
     file: UploadFile,
-    current: CurrentUser = Depends(require_admin_or_manager),
+    current: CurrentUser = Depends(require_org_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Managers and admins keep the existing unassigned import flow. A
+    # telecaller can import their own list, but ownership is always derived
+    # from the authenticated user rather than accepted from the uploaded file
+    # or a query parameter.
+    if current.role not in (UserRole.admin, UserRole.manager, UserRole.telecaller):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only an admin, manager, or telecaller can import leads")
+    import_assignee_id = current.id if current.role == UserRole.telecaller else None
+    import_source = "telecaller_import" if import_assignee_id else "bulk_import"
+
     raw = await file.read()
     filename = (file.filename or "").lower()
 
@@ -1409,14 +1418,16 @@ async def bulk_import_leads(
             category=row["category"],
             custom_category=row["custom_category"],
             interested_categories=row["interested_categories"],
-            # New imports stay unassigned until an admin or manager explicitly
-            # uses the bulk assignment or auto-distribution action.
-            assigned_to=None,
+            # Telecaller uploads are private to that telecaller; admin/manager
+            # uploads retain the existing unassigned behavior.
+            assigned_to=import_assignee_id,
         )
         new_leads.append(lead)
 
     db.add_all(new_leads)
     await db.flush()
+    if import_assignee_id:
+        assignments_count["You"] = len(new_leads)
     for lead in new_leads:
         record_assignment(
             db,
@@ -1426,7 +1437,7 @@ async def bulk_import_leads(
             new_assignee_id=lead.assigned_to,
             assigned_by_id=current.id,
             action="created",
-            source="bulk_import",
+            source=import_source,
         )
         record_audit(
             db,
@@ -1436,7 +1447,11 @@ async def bulk_import_leads(
             entity_id=lead.id,
             action="created",
             summary=f"Lead imported: {lead.name}",
-            payload={"source": source.value, "import_source": "bulk_import"},
+            payload={
+                "source": source.value,
+                "import_source": import_source,
+                "assigned_to": str(import_assignee_id) if import_assignee_id else None,
+            },
         )
         await run_automations(db, organization_id=current.organization_id, actor_id=current.id, trigger="lead_created", lead=lead)
     await db.commit()
